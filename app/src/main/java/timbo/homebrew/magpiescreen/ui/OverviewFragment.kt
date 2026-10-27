@@ -1,5 +1,6 @@
 package timbo.homebrew.magpiescreen.ui
 
+import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -7,6 +8,7 @@ import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -241,7 +243,7 @@ class OverviewFragment : BaseFragment() {
             .sortedWith(compareByDescending<Group> { it.stats.tokens.total }.thenBy { it.id })
             .take(3)
         b.rankingEmpty.visibility = if (groups.isEmpty()) View.VISIBLE else View.GONE
-        adapter.submit(groups, groups.maxOfOrNull { it.stats.tokens.total } ?: 0L)
+        adapter.submit(groups, groups.maxOfOrNull { it.stats.tokens.total } ?: 0L, animate)
     }
 
     /** Tapping a bar pops that bucket's window, its totals and the per-model split. */
@@ -368,9 +370,12 @@ class OverviewFragment : BaseFragment() {
 
         private var groups: List<Group> = emptyList()
         private var maxTokens: Long = 0
-        fun submit(groups: List<Group>, maxTokens: Long) {
+        private var animate = false
+
+        fun submit(groups: List<Group>, maxTokens: Long, animate: Boolean) {
             this.groups = groups
             this.maxTokens = maxTokens
+            this.animate = animate
             notifyDataSetChanged()
         }
 
@@ -387,9 +392,28 @@ class OverviewFragment : BaseFragment() {
             holder.binding.name.text = group.name
             holder.binding.value.text = Fmt.compact(tokens)
             val ratio = if (maxTokens <= 0) 0 else (tokens * 1000 / maxTokens).toInt()
-            holder.binding.bar.progress = ratio
+            holder.progressAnimator?.cancel()
+            holder.progressAnimator = null
+            if (animate) {
+                holder.binding.bar.progress = 0
+                holder.progressAnimator = ObjectAnimator.ofInt(holder.binding.bar, "progress", 0, ratio).apply {
+                    duration = 380L
+                    interpolator = DecelerateInterpolator()
+                    start()
+                }
+            } else {
+                holder.binding.bar.progress = ratio
+            }
         }
 
-        class Holder(val binding: ItemGroupBinding) : RecyclerView.ViewHolder(binding.root)
+        override fun onViewRecycled(holder: Holder) {
+            holder.progressAnimator?.cancel()
+            holder.progressAnimator = null
+            super.onViewRecycled(holder)
+        }
+
+        class Holder(val binding: ItemGroupBinding) : RecyclerView.ViewHolder(binding.root) {
+            var progressAnimator: ObjectAnimator? = null
+        }
     }
 }

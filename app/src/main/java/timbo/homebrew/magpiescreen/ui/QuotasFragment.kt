@@ -1,9 +1,11 @@
 package timbo.homebrew.magpiescreen.ui
 
+import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -69,10 +71,10 @@ class QuotasFragment : BaseFragment() {
     }
 
     override fun onRefreshTick() {
-        load(force = false)
+        load(force = false, animate = false)
     }
 
-    private fun load(force: Boolean = false) {
+    private fun load(force: Boolean = false, animate: Boolean = true) {
         val b = binding ?: return
         val source = app.connection()
         if (source == null) {
@@ -99,6 +101,7 @@ class QuotasFragment : BaseFragment() {
                         false,
                     ),
                     preview = false,
+                    animate = animate,
                 )
                 return
             }
@@ -116,6 +119,7 @@ class QuotasFragment : BaseFragment() {
                         false,
                     ),
                     preview = true,
+                    animate = false,
                 )
             }
         }
@@ -166,14 +170,19 @@ class QuotasFragment : BaseFragment() {
                 }
                 if (version != loadVersion) return@launch
                 val view = binding ?: return@launch
-                applyData(view, loaded, preview = false)
+                applyData(view, loaded, preview = false, animate = animate)
             } finally {
                 if (loadingKey == loadKey) loadingKey = null
             }
         }
     }
 
-    private fun applyData(b: FragmentQuotasBinding, loaded: Loaded, preview: Boolean) {
+    private fun applyData(
+        b: FragmentQuotasBinding,
+        loaded: Loaded,
+        preview: Boolean,
+        animate: Boolean,
+    ) {
         if (loaded.cardsBody != null) {
             runCatching { Quotas.parseCards(loaded.cardsBody) }.getOrNull()?.let {
                 cards = it
@@ -206,7 +215,7 @@ class QuotasFragment : BaseFragment() {
             else -> "${providers.size} 个供应商 · ${cards.size} 张卡片 · 更新 ${Fmt.clock(lastUpdatedMillis)}"
         }
         renderProviders(b)
-        renderCards(b)
+        renderCards(b, animate = animate && loaded.cardsBody != null)
         renderHistory(b)
     }
 
@@ -231,7 +240,7 @@ class QuotasFragment : BaseFragment() {
                     selected = provider
                     binding?.let { view ->
                         renderProviders(view)
-                        renderCards(view)
+                        renderCards(view, animate = true)
                         renderHistory(view)
                     }
                 }
@@ -240,7 +249,7 @@ class QuotasFragment : BaseFragment() {
         }
     }
 
-    private fun renderCards(b: FragmentQuotasBinding) {
+    private fun renderCards(b: FragmentQuotasBinding, animate: Boolean = false) {
         b.cards.removeAllViews()
         if (cards.isEmpty()) {
             val message = loadError?.let { "额度读取失败：$it" }
@@ -249,11 +258,11 @@ class QuotasFragment : BaseFragment() {
             return
         }
         val shown = cards.filter { it.provider == selected }
-        shown.forEach { b.cards.addView(cardView(it)) }
+        shown.forEach { b.cards.addView(cardView(it, animate)) }
         fillColumn(b, shown)
     }
 
-    private fun cardView(card: QuotaCard): LinearLayout {
+    private fun cardView(card: QuotaCard, animate: Boolean): LinearLayout {
         val box = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.card_bg)
@@ -274,7 +283,7 @@ class QuotasFragment : BaseFragment() {
         if (card.windows.isEmpty()) {
             box.addView(text("窗口：未提供", 10, R.color.muted))
         } else {
-            card.windows.forEachIndexed { index, window -> box.addView(windowView(window, index)) }
+            card.windows.forEachIndexed { index, window -> box.addView(windowView(window, index, animate)) }
         }
 
         val stamp = listOfNotNull(
@@ -285,7 +294,7 @@ class QuotasFragment : BaseFragment() {
         return box
     }
 
-    private fun windowView(window: QuotaWindow, index: Int): LinearLayout {
+    private fun windowView(window: QuotaWindow, index: Int, animate: Boolean): LinearLayout {
         val block = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -320,22 +329,28 @@ class QuotasFragment : BaseFragment() {
         block.addView(head)
 
         if (remaining != null && !window.unlimited && window.text == null) {
-            block.addView(
-                ProgressBar(requireContext(), null, android.R.attr.progressBarStyleHorizontal).apply {
-                    max = 100
-                    progress = remaining
-                    val fill = if (remaining <= 10) R.color.error else R.color.bar
-                    progressTintList = android.content.res.ColorStateList.valueOf(context.getColor(fill))
-                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.line))
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        dp(4),
-                    ).apply {
-                        topMargin = dp(3)
-                        bottomMargin = dp(3)
-                    }
-                },
-            )
+            val bar = ProgressBar(requireContext(), null, android.R.attr.progressBarStyleHorizontal).apply {
+                max = 100
+                progress = if (animate) 0 else remaining
+                val fill = if (remaining <= 10) R.color.error else R.color.bar
+                progressTintList = android.content.res.ColorStateList.valueOf(context.getColor(fill))
+                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.line))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(4),
+                ).apply {
+                    topMargin = dp(3)
+                    bottomMargin = dp(3)
+                }
+            }
+            block.addView(bar)
+            if (animate && remaining > 0) {
+                ObjectAnimator.ofInt(bar, "progress", 0, remaining).apply {
+                    duration = 380L
+                    interpolator = DecelerateInterpolator()
+                    start()
+                }
+            }
         }
         val facts = listOfNotNull(
             window.resetsAt?.let { "将重置于 ${Fmt.isoShortMinutes(it)}" },

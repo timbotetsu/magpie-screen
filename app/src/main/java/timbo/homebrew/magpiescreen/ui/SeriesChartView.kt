@@ -68,7 +68,7 @@ class SeriesChartView @JvmOverloads constructor(
         this.points = points
         this.formatter = formatter
         this.style = style
-        if (!animate || !isAttachedToWindow || points.isEmpty()) {
+        if (!animate || points.isEmpty()) {
             grow = 1f
             invalidate()
             return
