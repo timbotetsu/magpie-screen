@@ -92,4 +92,6 @@ app/src/test/              纯 JVM 单元测试
 
 ## 许可
 
-仓库暂未附带 LICENSE 文件，默认保留所有权利；打算开源的话请先补一个。
+以 [MIT License](LICENSE) 发布（Copyright © 2026 timbo）。
+
+本项目是 Magpie 网关的**第三方客户端**，与 Magpie 官方无隶属关系；Magpie 及其名称、图标归其作者所有。App 内不含任何 Magpie 代码，只通过其 REST 接口读取数据。
