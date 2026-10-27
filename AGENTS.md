@@ -45,7 +45,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 7. **颜色与尺寸用 token**：`values/colors.xml`（含 `heat0..4`、`series1..4`、`bar`）和 `values/themes.xml` 的 style；不要在代码里硬编码十六进制或 dp 字号。
 8. **一切请求只读**：只发 `GET`；不要新增写接口、后台上报或第三方依赖。
 9. **总览周期口径**：「今日」用 `last:<设备本地零点到现在>`（滚动窗口）；「本周」用 `YYYY-MM-DD..YYYY-MM-DD`（本地日历周一到周日，网关按自己的时区解释日期）；7日/30日用网关 preset。不要恢复「全部」或 `period=all`。
-10. **页面数据先查缓存**：所有页面请求走 `ResponseCache`；5 分钟内直接渲染缓存，过期才请求；手动刷新必须 `force=true` 并更新缓存；连接设置变化时清空 `cache` 与 `dayRequests`。缓存 key 必须包含网关地址和会改变口径的日期/周期。
+10. **页面数据先查缓存**：所有页面请求走 `ResponseCache`，加载顺序固定为 fresh 缓存 → stale 预览 → single-flight 请求；5 分钟内不发请求，过期才刷新；手动刷新必须 `force=true`；状态行的“更新”时间用缓存的 `fetchedAtWall`，不要用当前时间；连接设置变化时清空 `cache` 与 `dayRequests`。缓存 key 必须包含网关地址和会改变口径的日期/周期。
 
 ## 交互约定
 
@@ -80,6 +80,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `Parse.kt` 里 `Concurrency` / `ActiveRequest` / `Routes`（第 338–434 行）与 `Endpoints.ROUTE` | 约 97 行 + `RouteAndConcurrencyTest.kt` 69 行 | 运行时零调用，只被单测使用 | 它们是网关 `/v1/magpie/concurrency`、`/route` 的响应契约；将来做「实时请求 / 路由追踪」时直接可用。`Endpoints.CONCURRENCY` 仍被设置页能力自检使用，不能删 |
 | `RequestsPage` 的 `through/direct/reported/isConsistent` | 约 12 行 | UI 不读，但 `isConsistent` 有单测 | 请求页已改成热力图，不再展示这些分项；保留可随时恢复明细页 |
 | `QuotasFragment` 489 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
+| 三个数据页各自的缓存加载编排（fresh / stale / force / single-flight） | 约 100 行重复，页面加载流程没有纯 JVM 测试 | 新增页面或修改 TTL、状态行规则时要同步三处 | 目前只有 3 个数据页，抽 `CachedPageLoader` 的收益还不抵抽象成本；新增第 4 个数据页前先抽 |
 | 三个 Fragment 各一个 1 行私有 `dp()` | 3 行 | 无 | 合并要多一个文件，收益不抵成本 |
 
 要「零未使用代码」的发布版，删掉第一、二项即可：删 `Parse.kt` 第 338 行到文件末尾、`Endpoints.ROUTE`、`RouteAndConcurrencyTest.kt`，并在 `TokenMathTest` 去掉 `isConsistent` 两条断言，然后重新 `./gradlew test assembleDebug`。其余代码不依赖它们。
