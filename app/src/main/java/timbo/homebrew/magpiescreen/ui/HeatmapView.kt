@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.content.Context
 import android.graphics.Canvas
@@ -7,7 +7,7 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import ai.usemagpie.dashboard.R
+import timbo.homebrew.magpiescreen.R
 import java.time.DayOfWeek
 import java.time.LocalDate
 

@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.data
+package timbo.homebrew.magpiescreen.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

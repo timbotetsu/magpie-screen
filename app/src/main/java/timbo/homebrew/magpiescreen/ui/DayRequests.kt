@@ -1,11 +1,11 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
-import ai.usemagpie.dashboard.data.RequestRow
-import ai.usemagpie.dashboard.data.RequestsPage
-import ai.usemagpie.dashboard.net.ConnectionSettings
-import ai.usemagpie.dashboard.net.Endpoints
-import ai.usemagpie.dashboard.net.GatewayClient
-import ai.usemagpie.dashboard.net.GatewayResult
+import timbo.homebrew.magpiescreen.data.RequestRow
+import timbo.homebrew.magpiescreen.data.RequestsPage
+import timbo.homebrew.magpiescreen.net.ConnectionSettings
+import timbo.homebrew.magpiescreen.net.Endpoints
+import timbo.homebrew.magpiescreen.net.GatewayClient
+import timbo.homebrew.magpiescreen.net.GatewayResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate

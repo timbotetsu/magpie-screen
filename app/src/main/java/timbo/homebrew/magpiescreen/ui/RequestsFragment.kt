@@ -1,16 +1,16 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.lifecycleScope
-import ai.usemagpie.dashboard.R
-import ai.usemagpie.dashboard.data.RequestsPage
-import ai.usemagpie.dashboard.data.UsageSnapshot
-import ai.usemagpie.dashboard.databinding.FragmentRequestsBinding
-import ai.usemagpie.dashboard.net.Endpoints
-import ai.usemagpie.dashboard.net.GatewayResult
+import timbo.homebrew.magpiescreen.R
+import timbo.homebrew.magpiescreen.data.RequestsPage
+import timbo.homebrew.magpiescreen.data.UsageSnapshot
+import timbo.homebrew.magpiescreen.databinding.FragmentRequestsBinding
+import timbo.homebrew.magpiescreen.net.Endpoints
+import timbo.homebrew.magpiescreen.net.GatewayResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

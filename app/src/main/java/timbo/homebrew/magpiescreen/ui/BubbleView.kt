@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.content.Context
 import android.graphics.Color
@@ -9,7 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
-import ai.usemagpie.dashboard.R
+import timbo.homebrew.magpiescreen.R
 
 /**
  * The small card that pops next to a chip or heat-map cell: a title, one totals line and a

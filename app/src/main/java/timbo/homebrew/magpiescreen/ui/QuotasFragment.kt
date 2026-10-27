@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -8,16 +8,16 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
-import ai.usemagpie.dashboard.R
-import ai.usemagpie.dashboard.data.QuotaCard
-import ai.usemagpie.dashboard.data.QuotaHistory
-import ai.usemagpie.dashboard.data.parseIsoMillis
-import ai.usemagpie.dashboard.data.QuotaWindow
-import ai.usemagpie.dashboard.data.Quotas
-import ai.usemagpie.dashboard.databinding.FragmentQuotasBinding
-import ai.usemagpie.dashboard.net.ConnectionSettings
-import ai.usemagpie.dashboard.net.Endpoints
-import ai.usemagpie.dashboard.net.GatewayResult
+import timbo.homebrew.magpiescreen.R
+import timbo.homebrew.magpiescreen.data.QuotaCard
+import timbo.homebrew.magpiescreen.data.QuotaHistory
+import timbo.homebrew.magpiescreen.data.parseIsoMillis
+import timbo.homebrew.magpiescreen.data.QuotaWindow
+import timbo.homebrew.magpiescreen.data.Quotas
+import timbo.homebrew.magpiescreen.databinding.FragmentQuotasBinding
+import timbo.homebrew.magpiescreen.net.ConnectionSettings
+import timbo.homebrew.magpiescreen.net.Endpoints
+import timbo.homebrew.magpiescreen.net.GatewayResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

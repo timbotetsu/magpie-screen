@@ -130,7 +130,7 @@
                 android:textSize="10sp"
                 android:visibility="gone" />
 
-            <ai.usemagpie.dashboard.ui.QuotaTrendView
+            <timbo.homebrew.magpiescreen.ui.QuotaTrendView
                 android:id="@+id/trend"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"

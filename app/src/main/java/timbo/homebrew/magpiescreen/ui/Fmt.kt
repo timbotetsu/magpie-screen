@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import java.time.LocalDate
 import java.time.ZonedDateTime
@@ -48,7 +48,7 @@ object Fmt {
     /** Reset times: MM-dd HH:mm, no seconds. */
     fun isoShortMinutes(iso: String?): String {
         if (iso.isNullOrBlank()) return "未提供"
-        val millis = ai.usemagpie.dashboard.data.parseIsoMillis(iso)
+        val millis = timbo.homebrew.magpiescreen.data.parseIsoMillis(iso)
         return if (millis != null) dayMinutes.format(Date(millis)) else iso
     }
 

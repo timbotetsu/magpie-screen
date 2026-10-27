@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "ai.usemagpie.dashboard"
+    namespace = "timbo.homebrew.magpiescreen"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "ai.usemagpie.dashboard"
+        applicationId = "timbo.homebrew.magpiescreen"
         // LX04 (小爱触屏音箱) ships Android 8.1 = API 27.
         minSdk = 27
         targetSdk = 35

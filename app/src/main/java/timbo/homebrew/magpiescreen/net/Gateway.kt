@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.net
+package timbo.homebrew.magpiescreen.net
 
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull

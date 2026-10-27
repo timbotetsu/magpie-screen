@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.data
+package timbo.homebrew.magpiescreen.data
 
 import android.content.Context
 import android.content.SharedPreferences
