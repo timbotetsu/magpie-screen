@@ -51,7 +51,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - 总览周期 chip 只有今日/本周/7日/30日；只切换时间窗口，不弹气泡。
 - 总览小时柱状图固定本地 00–23：按本地小时放桶，缺失小时补 0，点空小时不弹气泡。
 - 额度趋势默认月窗口；点击图表切换周窗口，只重绘不重新请求；切换状态不持久化，切页重建后回到月视图。图表背景按天画格，白色虚线标记当前时刻。
-- 总览首次进入、切周期、点刷新时播放柱状图生长动画；5 分钟自动刷新不播放。额度趋势点击切换时 x 轴缩放并交叉淡入淡出，数据刷新不播放。
+- 总览首次进入、切周期、点刷新时播放柱状图生长动画；5 分钟自动刷新不播放。额度趋势点击切换时只做 x 轴缩放过渡，月线保持可见；数据刷新不播放。
 - 刷新节奏集中在 `BaseFragment`：可见时每 `REFRESH_INTERVAL_MS`（5 分钟）调一次 `onRefreshTick()`，回前台立即调；`onStop` 必须让定时器和 `FLAG_KEEP_SCREEN_ON` 都停下。设置页覆盖为空实现（表单不该被自动重置）。
 - 排名行不可点击。
 - 加载失败时保留上一次成功的数据，状态行写明失败原因；总览额外显示「快照 HH:mm:ss」。
@@ -77,7 +77,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---|---|---|---|
 | `Parse.kt` 里 `Concurrency` / `ActiveRequest` / `Routes`（第 338–434 行）与 `Endpoints.ROUTE` | 约 97 行 + `RouteAndConcurrencyTest.kt` 69 行 | 运行时零调用，只被单测使用 | 它们是网关 `/v1/magpie/concurrency`、`/route` 的响应契约；将来做「实时请求 / 路由追踪」时直接可用。`Endpoints.CONCURRENCY` 仍被设置页能力自检使用，不能删 |
 | `RequestsPage` 的 `through/direct/reported/isConsistent` | 约 12 行 | UI 不读，但 `isConsistent` 有单测 | 请求页已改成热力图，不再展示这些分项；保留可随时恢复明细页 |
-| `QuotasFragment` 394 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
+| `QuotasFragment` 389 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
 | 三个 Fragment 各一个 1 行私有 `dp()` | 3 行 | 无 | 合并要多一个文件，收益不抵成本 |
 
 要「零未使用代码」的发布版，删掉第一、二项即可：删 `Parse.kt` 第 338 行到文件末尾、`Endpoints.ROUTE`、`RouteAndConcurrencyTest.kt`，并在 `TokenMathTest` 去掉 `isConsistent` 两条断言，然后重新 `./gradlew test assembleDebug`。其余代码不依赖它们。

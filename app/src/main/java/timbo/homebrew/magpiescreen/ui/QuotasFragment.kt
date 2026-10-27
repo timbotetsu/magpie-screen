@@ -309,10 +309,8 @@ class QuotasFragment : BaseFragment() {
         )
 
         val series = ArrayList<QuotaTrendView.Series>()
-        val axisDuration = axis.third - axis.second
-        // Dashed pace lines: the two longest windows inside the visible span.
+        // Dashed pace lines: the two longest windows, shown in both axis modes.
         bounds
-            .filter { it.third - it.second <= axisDuration }
             .sortedByDescending { it.third - it.second }
             .take(2)
             .forEach { (line, start, reset) ->
@@ -324,11 +322,8 @@ class QuotasFragment : BaseFragment() {
                     points = listOf(QuotaTrendView.Point(start, 100.0), QuotaTrendView.Point(reset, 0.0)),
                 )
             }
-        // Solid: what was actually measured, for windows no longer than the axis.
+        // Solid: what was actually measured. The month line stays visible in the week axis too.
         windows.forEach { line ->
-            val start = line.windowStart?.let { parseIsoMillis(it) }
-            val reset = line.windowReset?.let { parseIsoMillis(it) }
-            if (start != null && reset != null && reset - start > axisDuration) return@forEach
             val points = line.points.mapNotNull { (at, left) ->
                 parseIsoMillis(at)?.let { QuotaTrendView.Point(it, left) }
             }

@@ -30,7 +30,6 @@ class QuotaTrendView @JvmOverloads constructor(
     data class Series(val name: String, val color: Int, val dashed: Boolean, val points: List<Point>)
 
     private var series: List<Series> = emptyList()
-    private var oldSeries: List<Series> = emptyList()
     private var xStart: Long = 0
     private var xEnd: Long = 1
     private var fromStart: Long = 0
@@ -86,12 +85,10 @@ class QuotaTrendView @JvmOverloads constructor(
         if (canAnimate) {
             fromStart = baseStart
             fromEnd = baseEnd
-            oldSeries = this.series
             progress = 0f
         } else {
             fromStart = xStart
             fromEnd = nextEnd
-            oldSeries = emptyList()
             progress = 1f
         }
         this.series = series.filter { it.points.size >= 2 }
@@ -111,7 +108,6 @@ class QuotaTrendView @JvmOverloads constructor(
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
                         progress = 1f
-                        oldSeries = emptyList()
                         animator = null
                         invalidate()
                     }
@@ -173,32 +169,22 @@ class QuotaTrendView @JvmOverloads constructor(
         canvas.drawLine(0f, top, w, top, axisPaint)
         canvas.drawLine(0f, bottom, w, bottom, axisPaint)
 
-        if (series.isEmpty() && oldSeries.isEmpty()) {
+        if (series.isEmpty()) {
             canvas.drawText("暂无数据", 4f, h / 2, textPaint)
             return
         }
 
-        fun drawSeries(lines: List<Series>, alpha: Int) {
-            if (alpha <= 0) return
-            linePaint.alpha = alpha
-            lines.forEach { line ->
-                linePaint.color = line.color
-                linePaint.pathEffect = if (line.dashed) DashPathEffect(floatArrayOf(9f, 7f), 0f) else null
-                path.reset()
-                line.points.forEachIndexed { index, point ->
-                    val x = xOf(point.timeMillis)
-                    val y = yOf(point.value)
-                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                canvas.drawPath(path, linePaint)
+        series.forEach { line ->
+            linePaint.color = line.color
+            linePaint.pathEffect = if (line.dashed) DashPathEffect(floatArrayOf(9f, 7f), 0f) else null
+            path.reset()
+            line.points.forEachIndexed { index, point ->
+                val x = xOf(point.timeMillis)
+                val y = yOf(point.value)
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
+            canvas.drawPath(path, linePaint)
         }
-
-        // Crossfade the old window out while the new one grows into place.
-        val newAlpha = (progress.coerceIn(0f, 1f) * 255f).toInt()
-        drawSeries(oldSeries, 255 - newAlpha)
-        drawSeries(series, newAlpha)
-        linePaint.alpha = 255
 
         // The current moment, so "now" is readable against the window.
         val nowX = xOf(System.currentTimeMillis())
