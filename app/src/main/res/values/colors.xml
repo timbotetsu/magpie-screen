@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#0F1216</color>
+    <color name="surface">#161C22</color>
+    <color name="card">#1B2229</color>
+    <color name="line">#2A333C</color>
+    <color name="fg">#E6EDF3</color>
+    <color name="muted">#8C99A6</color>
+    <color name="accent">#46D3B4</color>
+    <color name="accent_dim">#1F4A42</color>
+    <color name="error">#F2695F</color>
+    <color name="warning">#E5B454</color>
+    <color name="heat0">#1B2229</color>
+    <color name="heat1">#1F4A42</color>
+    <color name="heat2">#27655A</color>
+    <color name="heat3">#349380</color>
+    <color name="heat4">#46D3B4</color>
+    <color name="bar">#7C8FA3</color>
+    <color name="series1">#46D3B4</color>
+    <color name="series2">#6FA8FF</color>
+    <color name="series3">#E5B454</color>
+    <color name="series4">#C58BFF</color>
+</resources>
