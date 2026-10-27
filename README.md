@@ -17,7 +17,9 @@
 
 界面文案为中文，数值格式统一由 `Fmt` 处理（`3.14M`、`72.2%`、`1.2K`、`10-27 19:36`）。
 
-**刷新策略**：页面在前台时每 5 分钟自动重拉一次，从后台回到前台立刻拉一次；页面可见期间保持屏幕常亮（`FLAG_KEEP_SCREEN_ON`），离开页面即释放，所以挂在墙上不会停在旧数字上。手机息屏/切到后台后不再请求。
+**刷新策略**：页面在前台时每 1 分钟检查一次缓存，只有数据超过 5 分钟才重新请求；从后台回到前台也同样先查缓存。手动点刷新会绕过缓存强制请求。页面可见期间保持屏幕常亮（`FLAG_KEEP_SCREEN_ON`），离开页面即释放，所以挂在墙上不会停在旧数字上。手机息屏/切到后台后不再请求。
+
+**缓存**：页面共享一份进程内响应缓存（5 分钟 TTL，按网关地址、日期和周期分 key），切 Tab 或重新进入页面会直接复用；过期后先显示旧数据再后台刷新，失败时保留旧数据。连接设置变化时缓存清空。
 
 **动效**：总览首次进入、切换周期或点刷新时，柱状图从底部生长；额度趋势点击切换月/周时，横轴平滑缩放，月线始终保留。5 分钟自动刷新不做动画。
 
@@ -45,7 +47,7 @@ App 只读 Magpie 网关的管理接口，全部为 `GET`，带 `Authorization: 
 需要 JDK 17、Android SDK 35。
 
 ```bash
-./gradlew test            # 单元测试（URL 规则、token 口径、时区展示、route/concurrency 解析）
+./gradlew test            # 单元测试（URL 规则、token 口径、时区展示、缓存 TTL、route/concurrency 解析）
 ./gradlew assembleDebug   # app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -64,6 +66,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 app/src/main/java/timbo/homebrew/magpiescreen/
   MainActivity.kt          底栏四个入口，切页即重建 Fragment
   net/Gateway.kt           OkHttp 客户端、错误分类、地址规则、接口路径
+  net/ResponseCache.kt     5 分钟 TTL 响应缓存、stale 读取、single-flight
   data/AppPrefs.kt         地址与 key（EncryptedSharedPreferences，Keystore 不可用时退化为普通偏好）
   data/Parse.kt            网关 JSON → 数据类（usage / requests / quotas / limit / concurrency / route）
   ui/OverviewFragment.kt   总览：周期切换、KPI、本地 00–23 柱状图、排行、点柱气泡
@@ -74,7 +77,7 @@ app/src/main/java/timbo/homebrew/magpiescreen/
   ui/HeatmapView.kt        日历热力图（18 周 × 7 天，可点；月份标签只标完整月份）
   ui/QuotaTrendView.kt     额度趋势折线（月/周轴、日网格、当前时刻虚线、实线/虚线）
   ui/BubbleView.kt         统一的小气泡（标题 + 总计 + 三列表格 + 自动夹边 + 定时关闭）
-  ui/DayRequests.kt        按天分页拉请求明细并按模型聚合，按日期缓存
+  ui/DayRequests.kt        共享的按天明细缓存（5 分钟 TTL）+ 按模型聚合
   ui/Fmt.kt                数字/时间格式化，网关时间戳转设备时区
 app/src/main/res/          布局、颜色与样式 token、drawable
 app/src/test/              纯 JVM 单元测试
@@ -90,7 +93,8 @@ app/src/test/              纯 JVM 单元测试
 
 - 只适配 Magpie 网关的管理接口，别的网关（LiteLLM、One API 等）不适用。
 - 网关侧历史约 30 天，热力图/趋势的早期数据会偏空。
-- release 包当前未签名：`./gradlew assembleRelease` 产出 `app-release-unsigned.apk`，需要自己的 keystore 签名后才能分发。
+- release 包默认由 `keystore.properties` 指定的 key 签名；没有该文件时 `assembleRelease` 产出未签名包，需要自备 keystore。
+- 缓存只存在内存里，进程重启后首次进入页面会重新请求；连接设置变化也会清空缓存。
 - 订阅额度只来自当前连接的网关；如果 ClinePass 之类的订阅挂在另一台 Magpie 上，那台网关需要对外提供 `/v1/magpie/quotas` 才能看到。
 
 ## 许可

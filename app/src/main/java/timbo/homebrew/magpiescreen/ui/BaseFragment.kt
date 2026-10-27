@@ -7,6 +7,7 @@ import androidx.lifecycle.lifecycleScope
 import timbo.homebrew.magpiescreen.MainActivity
 import timbo.homebrew.magpiescreen.net.GatewayError
 import timbo.homebrew.magpiescreen.net.GatewayResult
+import timbo.homebrew.magpiescreen.net.ResponseCache
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -15,9 +16,10 @@ import kotlinx.coroutines.launch
 /**
  * Shared fragment behaviour: a dashboard that keeps itself current while it is on screen.
  *
- * - every [REFRESH_INTERVAL_MS] the page reloads itself (unless the page overrides
- *   [onRefreshTick] to do nothing, as the settings form does);
- * - coming back to the foreground refreshes at once, going away stops the timer;
+ * - every [CHECK_INTERVAL_MS] the page checks its cache and only requests data older than
+ *   [ResponseCache.DEFAULT_TTL_MS] (unless the page overrides [onRefreshTick] to do nothing,
+ *   as the settings form does);
+ * - coming back to the foreground runs a cache check at once, going away stops the timer;
  * - the screen is kept on while any page is in the foreground, so a wall-mounted device does
  *   not fall asleep and freeze on stale numbers.
  */
@@ -35,7 +37,7 @@ abstract class BaseFragment : Fragment() {
         ticker?.cancel()
         ticker = viewLifecycleOwner.lifecycleScope.launch {
             while (isActive) {
-                delay(REFRESH_INTERVAL_MS)
+                delay(CHECK_INTERVAL_MS)
                 onRefreshTick()
             }
         }
@@ -66,7 +68,7 @@ abstract class BaseFragment : Fragment() {
     }
 
     protected companion object {
-        /** Every page reloads itself on this cadence while it is visible. */
-        const val REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+        /** Cache checks are cheap; the 5-minute freshness rule lives in [ResponseCache]. */
+        const val CHECK_INTERVAL_MS = 60_000L
     }
 }

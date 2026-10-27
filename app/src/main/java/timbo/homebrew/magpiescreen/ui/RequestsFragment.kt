@@ -23,12 +23,19 @@ class RequestsFragment : BaseFragment() {
     private var snapshot: UsageSnapshot? = null
     private var lastUpdatedMillis = 0L
     private var loadVersion = 0
-    // Constructed on first use: a field initialiser would run before the fragment is attached.
-    private val dayRequests by lazy { DayRequests(app.gateway) }
+    private var loadingKey: String? = null
+    private val dayRequests get() = app.dayRequests
+
+    private sealed class Loaded {
+        data class Ok(val snapshot: UsageSnapshot, val at: Long) : Loaded()
+        data class Failed(val error: GatewayResult.Err) : Loaded()
+        object Invalid : Loaded()
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val b = FragmentRequestsBinding.inflate(inflater, container, false)
         binding = b
-        b.refresh.setOnClickListener { load() }
+        b.refresh.setOnClickListener { load(force = true) }
         // Draw the empty grid at its final size while the first request is in flight.
         b.heatmap.setData(emptyMap(), null, LocalDate.now(), columns = WEEKS, fillHeight = false) { day, x, y ->
             showBubble(day, x, y)
@@ -43,38 +50,92 @@ class RequestsFragment : BaseFragment() {
     }
 
     override fun onRefreshTick() {
-        load()
+        load(force = false)
     }
 
-    private fun load() {
+    private fun load(force: Boolean = false) {
         val b = binding ?: return
         val conn = app.connection()
         if (conn == null) {
             b.status.text = "未配置连接"
             return
         }
+        val key = "${conn.base}|usage|requests:$YEAR_PERIOD:${LocalDate.now()}"
+        if (loadingKey == key) return
         val version = ++loadVersion
-        b.status.text = "读取中…"
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                app.gateway.get(conn, Endpoints.USAGE, listOf("period" to YEAR_PERIOD))
-            }
-            if (version != loadVersion) return@launch
-            val view = binding ?: return@launch
-            val parsed = (result as? GatewayResult.Ok)?.let { ok ->
-                runCatching { UsageSnapshot.parse(ok.body) }.getOrNull()
-            }
-            when {
-                result is GatewayResult.Err -> view.status.text = "读取失败：${describe(result)}"
-                parsed == null -> view.status.text = "响应不可解析：usage 返回的不是预期结构"
-                else -> {
+
+        if (!force) {
+            app.cache.fresh(key)?.let { cached ->
+                val parsed = parseUsageBody(cached.body)
+                if (parsed != null) {
                     snapshot = parsed
-                    lastUpdatedMillis = System.currentTimeMillis()
+                    lastUpdatedMillis = cached.fetchedAtWall
+                    render()
+                    return
+                }
+            }
+            app.cache.get(key)?.let { stale ->
+                val parsed = parseUsageBody(stale.body)
+                if (parsed != null) {
+                    snapshot = parsed
+                    lastUpdatedMillis = stale.fetchedAtWall
                     render()
                 }
             }
         }
+
+        loadingKey = key
+        b.status.text = if (snapshot != null && !force) {
+            "缓存 ${Fmt.clock(lastUpdatedMillis)} · 更新中…"
+        } else {
+            "读取中…"
+        }
+        lifecycleScope.launch {
+            try {
+                val loaded = app.cache.singleFlight(key) {
+                    if (!force) {
+                        app.cache.fresh(key)?.let { cached ->
+                            parseUsageBody(cached.body)?.let {
+                                return@singleFlight Loaded.Ok(it, cached.fetchedAtWall)
+                            }
+                        }
+                    }
+                    val result = withContext(Dispatchers.IO) {
+                        app.gateway.get(conn, Endpoints.USAGE, listOf("period" to YEAR_PERIOD))
+                    }
+                    when {
+                        result is GatewayResult.Err -> Loaded.Failed(result)
+                        else -> {
+                            val body = (result as GatewayResult.Ok).body
+                            val parsed = parseUsageBody(body)
+                            if (parsed == null) {
+                                Loaded.Invalid
+                            } else {
+                                app.cache.put(key, body)
+                                Loaded.Ok(parsed, app.cache.get(key)?.fetchedAtWall ?: System.currentTimeMillis())
+                            }
+                        }
+                    }
+                }
+                if (version != loadVersion) return@launch
+                val view = binding ?: return@launch
+                when (loaded) {
+                    is Loaded.Ok -> {
+                        snapshot = loaded.snapshot
+                        lastUpdatedMillis = loaded.at
+                        render()
+                    }
+                    is Loaded.Failed -> view.status.text = "读取失败：${describe(loaded.error)}"
+                    Loaded.Invalid -> view.status.text = "响应不可解析：usage 返回的不是预期结构"
+                }
+            } finally {
+                if (loadingKey == key) loadingKey = null
+            }
+        }
     }
+
+    private fun parseUsageBody(body: String): UsageSnapshot? =
+        runCatching { UsageSnapshot.parse(body) }.getOrNull()
 
     private fun render() {
         val b = binding ?: return

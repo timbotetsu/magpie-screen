@@ -7,8 +7,10 @@ import timbo.homebrew.magpiescreen.data.AppPrefs
 import timbo.homebrew.magpiescreen.databinding.ActivityMainBinding
 import timbo.homebrew.magpiescreen.net.ConnectionSettings
 import timbo.homebrew.magpiescreen.net.GatewayClient
+import timbo.homebrew.magpiescreen.net.ResponseCache
 import timbo.homebrew.magpiescreen.net.UrlCheck
 import timbo.homebrew.magpiescreen.net.UrlRules
+import timbo.homebrew.magpiescreen.ui.DayRequests
 import timbo.homebrew.magpiescreen.ui.OverviewFragment
 import timbo.homebrew.magpiescreen.ui.QuotasFragment
 import timbo.homebrew.magpiescreen.ui.RequestsFragment
@@ -20,6 +22,9 @@ class MainActivity : AppCompatActivity() {
     lateinit var prefs: AppPrefs
         private set
     val gateway = GatewayClient()
+    /** Survives tab switches; cleared when the connection changes. */
+    val cache = ResponseCache()
+    val dayRequests = DayRequests(gateway)
 
     private var currentTab: String = TAB_OVERVIEW
 
@@ -60,6 +65,8 @@ class MainActivity : AppCompatActivity() {
     fun storeConnection(rawUrl: String, key: String) {
         prefs.baseUrl = rawUrl.trim()
         prefs.apiKey = key.trim()
+        cache.clear()
+        dayRequests.clear()
     }
 
     fun select(tab: String, force: Boolean = false) {

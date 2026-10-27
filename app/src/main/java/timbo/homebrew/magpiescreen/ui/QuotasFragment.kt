@@ -15,7 +15,6 @@ import timbo.homebrew.magpiescreen.data.parseIsoMillis
 import timbo.homebrew.magpiescreen.data.QuotaWindow
 import timbo.homebrew.magpiescreen.data.Quotas
 import timbo.homebrew.magpiescreen.databinding.FragmentQuotasBinding
-import timbo.homebrew.magpiescreen.net.ConnectionSettings
 import timbo.homebrew.magpiescreen.net.Endpoints
 import timbo.homebrew.magpiescreen.net.GatewayResult
 import kotlinx.coroutines.Dispatchers
@@ -38,11 +37,22 @@ class QuotasFragment : BaseFragment() {
     private var windowColors: Map<String, Int> = emptyMap()
     /** false: month axis; true: week axis. */
     private var weeklyTrend = false
+    private var lastUpdatedMillis = 0L
+    private var loadVersion = 0
+    private var loadingKey: String? = null
+
+    private data class Loaded(
+        val cardsBody: String?,
+        val historyBody: String?,
+        val at: Long,
+        val cardsError: GatewayResult.Err?,
+        val cardsInvalid: Boolean,
+    )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val b = FragmentQuotasBinding.inflate(inflater, container, false)
         binding = b
-        b.refresh.setOnClickListener { load() }
+        b.refresh.setOnClickListener { load(force = true) }
         b.trend.setOnClickListener {
             weeklyTrend = !weeklyTrend
             renderHistory(b, animate = true)
@@ -59,56 +69,145 @@ class QuotasFragment : BaseFragment() {
     }
 
     override fun onRefreshTick() {
-        load()
+        load(force = false)
     }
 
-    private fun load() {
+    private fun load(force: Boolean = false) {
         val b = binding ?: return
         val source = app.connection()
         if (source == null) {
             b.status.text = "未配置连接"
             return
         }
-        b.status.text = "读取中…"
-        lifecycleScope.launch {
-            val cardsResult = withContext(Dispatchers.IO) {
-                app.gateway.get(source, Endpoints.QUOTAS, listOf("kept" to "1"))
+        val cardsKey = "${source.base}|quotas|cards"
+        val historyKey = "${source.base}|quotas|history"
+        val loadKey = "${source.base}|quotas|load"
+        if (loadingKey == loadKey) return
+        val version = ++loadVersion
+
+        if (!force) {
+            val cardsCached = app.cache.fresh(cardsKey)
+            val historyCached = app.cache.fresh(historyKey)
+            if (cardsCached != null && historyCached != null) {
+                applyData(
+                    b,
+                    Loaded(
+                        cardsCached.body,
+                        historyCached.body,
+                        maxOf(cardsCached.fetchedAtWall, historyCached.fetchedAtWall),
+                        null,
+                        false,
+                    ),
+                    preview = false,
+                )
+                return
             }
-            val historyResult = withContext(Dispatchers.IO) {
-                app.gateway.get(source, Endpoints.QUOTA_HISTORY)
+            // Stale-while-revalidate: show the previous cards and trend while the refresh runs.
+            val staleCards = app.cache.get(cardsKey)
+            val staleHistory = app.cache.get(historyKey)
+            if (staleCards != null && staleHistory != null) {
+                applyData(
+                    b,
+                    Loaded(
+                        staleCards.body,
+                        staleHistory.body,
+                        maxOf(staleCards.fetchedAtWall, staleHistory.fetchedAtWall),
+                        null,
+                        false,
+                    ),
+                    preview = true,
+                )
             }
-            val view = binding ?: return@launch
-
-            loadError = (cardsResult as? GatewayResult.Err)?.let { describe(it) }
-            cards = (cardsResult as? GatewayResult.Ok)?.let { r ->
-                runCatching { Quotas.parseCards(r.body) }.getOrNull()
-            }.orEmpty()
-            history = (historyResult as? GatewayResult.Ok)?.let { r ->
-                runCatching { Quotas.parseHistory(r.body) }.getOrNull()
-            }.orEmpty()
-
-            providers = cards.map { it.provider }.filter { it.isNotBlank() }.distinct()
-            if (selected !in providers) selected = providers.firstOrNull()
-
-            val palette = intArrayOf(R.color.series1, R.color.series2, R.color.series3, R.color.series4)
-            val names = (cards.flatMap { card -> card.windows.map { it.name } } +
-                history.flatMap { entry -> entry.lines.map { it.name } })
-                .filter { it.isNotBlank() }
-                .distinct()
-                .sorted()
-            windowColors = names.mapIndexed { index, name ->
-                name to requireContext().getColor(palette[index % palette.size])
-            }.toMap()
-
-            view.status.text = if (loadError != null) {
-                "读取失败：$loadError"
-            } else {
-                "${providers.size} 个供应商 · ${cards.size} 张卡片 · 更新 ${Fmt.clock(System.currentTimeMillis())}"
-            }
-            renderProviders(view)
-            renderCards(view)
-            renderHistory(view)
         }
+
+        loadingKey = loadKey
+        b.status.text = if (lastUpdatedMillis > 0 && !force) {
+            "缓存 ${Fmt.clock(lastUpdatedMillis)} · 更新中…"
+        } else {
+            "读取中…"
+        }
+        lifecycleScope.launch {
+            try {
+                val loaded = app.cache.singleFlight(loadKey) {
+                    if (!force) {
+                        val cardsCached = app.cache.fresh(cardsKey)
+                        val historyCached = app.cache.fresh(historyKey)
+                        if (cardsCached != null && historyCached != null) {
+                            return@singleFlight Loaded(
+                                cardsCached.body,
+                                historyCached.body,
+                                maxOf(cardsCached.fetchedAtWall, historyCached.fetchedAtWall),
+                                null,
+                                false,
+                            )
+                        }
+                    }
+                    val cardsResult = withContext(Dispatchers.IO) {
+                        app.gateway.get(source, Endpoints.QUOTAS, listOf("kept" to "1"))
+                    }
+                    val historyResult = withContext(Dispatchers.IO) {
+                        app.gateway.get(source, Endpoints.QUOTA_HISTORY)
+                    }
+                    val cardsBody = (cardsResult as? GatewayResult.Ok)?.body?.takeIf { body ->
+                        runCatching { Quotas.parseCards(body) }.getOrNull() != null
+                    }
+                    val historyBody = (historyResult as? GatewayResult.Ok)?.body?.takeIf { body ->
+                        runCatching { Quotas.parseHistory(body) }.getOrNull() != null
+                    }
+                    if (cardsBody != null) app.cache.put(cardsKey, cardsBody)
+                    if (historyBody != null) app.cache.put(historyKey, historyBody)
+                    Loaded(
+                        cardsBody,
+                        historyBody,
+                        System.currentTimeMillis(),
+                        (cardsResult as? GatewayResult.Err),
+                        cardsResult is GatewayResult.Ok && cardsBody == null,
+                    )
+                }
+                if (version != loadVersion) return@launch
+                val view = binding ?: return@launch
+                applyData(view, loaded, preview = false)
+            } finally {
+                if (loadingKey == loadKey) loadingKey = null
+            }
+        }
+    }
+
+    private fun applyData(b: FragmentQuotasBinding, loaded: Loaded, preview: Boolean) {
+        if (loaded.cardsBody != null) {
+            runCatching { Quotas.parseCards(loaded.cardsBody) }.getOrNull()?.let {
+                cards = it
+                loadError = null
+            }
+        }
+        if (loaded.historyBody != null) {
+            runCatching { Quotas.parseHistory(loaded.historyBody) }.getOrNull()?.let { history = it }
+        }
+        if (loaded.cardsError != null) loadError = describe(loaded.cardsError)
+        lastUpdatedMillis = loaded.at
+
+        providers = cards.map { it.provider }.filter { it.isNotBlank() }.distinct()
+        if (selected !in providers) selected = providers.firstOrNull()
+
+        val palette = intArrayOf(R.color.series1, R.color.series2, R.color.series3, R.color.series4)
+        val names = (cards.flatMap { card -> card.windows.map { it.name } } +
+            history.flatMap { entry -> entry.lines.map { it.name } })
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+        windowColors = names.mapIndexed { index, name ->
+            name to requireContext().getColor(palette[index % palette.size])
+        }.toMap()
+
+        b.status.text = when {
+            preview -> "缓存 ${Fmt.clock(lastUpdatedMillis)} · 更新中…"
+            loadError != null -> "读取失败：$loadError"
+            loaded.cardsInvalid -> "响应不可解析：额度"
+            else -> "${providers.size} 个供应商 · ${cards.size} 张卡片 · 更新 ${Fmt.clock(lastUpdatedMillis)}"
+        }
+        renderProviders(b)
+        renderCards(b)
+        renderHistory(b)
     }
 
     private fun renderProviders(b: FragmentQuotasBinding) {

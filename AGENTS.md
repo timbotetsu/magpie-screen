@@ -19,15 +19,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---|---|---|
 | `MainActivity.kt` | 四个底栏入口；切页即新建 Fragment（页面状态不保留） | `activity_main.xml`、各 Fragment 的 `load()` |
 | `net/Gateway.kt` | OkHttp 客户端、错误分类、`UrlRules`、`Endpoints`、`ConnectionSettings` | 所有请求方、`UrlRulesTest` |
+| `net/ResponseCache.kt` | 5 分钟 TTL 的响应缓存、stale 读取、single-flight、连接切换清空 | 所有页面的 `load()`、`BaseFragment` |
 | `data/Parse.kt` | 网关 JSON → 数据类；`Stats`/`Tokens` 的 total 口径 | `TokenMathTest`、`RouteAndConcurrencyTest` |
 | `data/AppPrefs.kt` | 地址 + key（EncryptedSharedPreferences，失败回退） | `SettingsFragment` |
-| `ui/OverviewFragment.kt` | 总览：今日/本周/7日/30日、KPI、本地 00–23 柱状图、排行、点柱气泡；请求版本号防竞态 | `SeriesChartView`、`BubbleView`、`DayRequests`、`Fmt` |
-| `ui/RequestsFragment.kt` | 18 周热力图 + 点格气泡 | `HeatmapView`、`DayRequests`、`Fmt` |
-| `ui/QuotasFragment.kt` | 订阅卡片 + 月/周趋势切换 + 速度判定 | `QuotaTrendView`、`Parse.Quotas`、`Fmt` |
+| `ui/OverviewFragment.kt` | 总览：今日/本周/7日/30日、KPI、本地 00–23 柱状图、排行、点柱气泡；请求版本号防竞态、走缓存 | `SeriesChartView`、`BubbleView`、`DayRequests`、`Fmt` |
+| `ui/RequestsFragment.kt` | 18 周热力图 + 点格气泡、走缓存 | `HeatmapView`、`DayRequests`、`Fmt` |
+| `ui/QuotasFragment.kt` | 订阅卡片 + 月/周趋势切换 + 速度判定、走缓存 | `QuotaTrendView`、`Parse.Quotas`、`Fmt` |
 | `ui/SettingsFragment.kt` | 连接保存、能力自检 | `Gateway`、`Parse` |
-| `ui/BaseFragment.kt` | 每 5 分钟定时刷新（`onRefreshTick`）、回前台立即刷新、页面可见时保持屏幕常亮 | 各页 `onRefreshTick()` 实现 |
+| `ui/BaseFragment.kt` | 每 1 分钟检查缓存（`onRefreshTick`），5 分钟内不发请求；回前台先查缓存；页面可见时保持屏幕常亮 | 各页 `onRefreshTick()` 实现、`ResponseCache` |
 | `ui/BubbleView.kt` | 唯一的气泡实现（两侧共用） | — |
-| `ui/DayRequests.kt` | 按天明细分页 + 按模型聚合 + 按天缓存 | 500 条/页、3000 行上限 |
+| `ui/DayRequests.kt` | 共享的按天明细缓存（5 分钟 TTL、single-flight）+ 按模型聚合 | 500 条/页、3000 行上限 |
 | `ui/SeriesChartView.kt` | 柱状图与点按回调 | `OverviewFragment` |
 | `ui/HeatmapView.kt` | 日历热力图；月份标签只标完整月份 | `RequestsFragment` |
 | `ui/QuotaTrendView.kt` | 额度趋势：月/周轴、日网格、当前时刻虚线 | `QuotasFragment` |
@@ -44,6 +45,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 7. **颜色与尺寸用 token**：`values/colors.xml`（含 `heat0..4`、`series1..4`、`bar`）和 `values/themes.xml` 的 style；不要在代码里硬编码十六进制或 dp 字号。
 8. **一切请求只读**：只发 `GET`；不要新增写接口、后台上报或第三方依赖。
 9. **总览周期口径**：「今日」用 `last:<设备本地零点到现在>`（滚动窗口）；「本周」用 `YYYY-MM-DD..YYYY-MM-DD`（本地日历周一到周日，网关按自己的时区解释日期）；7日/30日用网关 preset。不要恢复「全部」或 `period=all`。
+10. **页面数据先查缓存**：所有页面请求走 `ResponseCache`；5 分钟内直接渲染缓存，过期才请求；手动刷新必须 `force=true` 并更新缓存；连接设置变化时清空 `cache` 与 `dayRequests`。缓存 key 必须包含网关地址和会改变口径的日期/周期。
 
 ## 交互约定
 
@@ -52,7 +54,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - 总览小时柱状图固定本地 00–23：按本地小时放桶，缺失小时补 0，点空小时不弹气泡。
 - 额度趋势默认月窗口；点击图表切换周窗口，只重绘不重新请求；切换状态不持久化，切页重建后回到月视图。图表背景按天画格，白色虚线标记当前时刻。
 - 总览首次进入、切周期、点刷新时播放柱状图生长动画；5 分钟自动刷新不播放。额度趋势点击切换时只做 x 轴缩放过渡，月线保持可见；数据刷新不播放。
-- 刷新节奏集中在 `BaseFragment`：可见时每 `REFRESH_INTERVAL_MS`（5 分钟）调一次 `onRefreshTick()`，回前台立即调；`onStop` 必须让定时器和 `FLAG_KEEP_SCREEN_ON` 都停下。设置页覆盖为空实现（表单不该被自动重置）。
+- 刷新节奏集中在 `BaseFragment`：可见时每 `CHECK_INTERVAL_MS`（1 分钟）做一次缓存检查，只有超过 `ResponseCache.DEFAULT_TTL_MS`（5 分钟）才发请求；回前台同样先查缓存；`onStop` 必须让定时器和 `FLAG_KEEP_SCREEN_ON` 都停下。设置页覆盖为空实现（表单不该被自动重置）。
 - 排名行不可点击。
 - 加载失败时保留上一次成功的数据，状态行写明失败原因；总览额外显示「快照 HH:mm:ss」。
 
@@ -66,7 +68,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## 发版
 
 - 版本在 `app/build.gradle.kts`：`versionCode` / `versionName`，发版前递增 `versionCode`。
-- `assembleRelease` 产物未签名（`isMinifyEnabled = false`），发布需要自备 keystore。
+- `assembleRelease` 在存在 `keystore.properties` 时用其中的 release key 签名；没有该文件时产物未签名（`isMinifyEnabled = false`），需要自备 keystore。
 - `applicationId = timbo.homebrew.magpiescreen`，`minSdk 27`，`targetSdk 35`。
 
 ## 已知取舍（不影响发布，改动前先确认）
@@ -77,7 +79,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---|---|---|---|
 | `Parse.kt` 里 `Concurrency` / `ActiveRequest` / `Routes`（第 338–434 行）与 `Endpoints.ROUTE` | 约 97 行 + `RouteAndConcurrencyTest.kt` 69 行 | 运行时零调用，只被单测使用 | 它们是网关 `/v1/magpie/concurrency`、`/route` 的响应契约；将来做「实时请求 / 路由追踪」时直接可用。`Endpoints.CONCURRENCY` 仍被设置页能力自检使用，不能删 |
 | `RequestsPage` 的 `through/direct/reported/isConsistent` | 约 12 行 | UI 不读，但 `isConsistent` 有单测 | 请求页已改成热力图，不再展示这些分项；保留可随时恢复明细页 |
-| `QuotasFragment` 389 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
+| `QuotasFragment` 489 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
 | 三个 Fragment 各一个 1 行私有 `dp()` | 3 行 | 无 | 合并要多一个文件，收益不抵成本 |
 
 要「零未使用代码」的发布版，删掉第一、二项即可：删 `Parse.kt` 第 338 行到文件末尾、`Endpoints.ROUTE`、`RouteAndConcurrencyTest.kt`，并在 `TokenMathTest` 去掉 `isConsistent` 两条断言，然后重新 `./gradlew test assembleDebug`。其余代码不依赖它们。

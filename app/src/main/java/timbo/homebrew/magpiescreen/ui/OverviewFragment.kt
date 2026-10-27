@@ -38,8 +38,15 @@ class OverviewFragment : BaseFragment() {
     private var chartBuckets: List<Bucket?> = emptyList()
     private var lastUpdatedMillis: Long = 0
     private var loadVersion = 0
+    private var loadingKey: String? = null
     private val adapter = RankingAdapter()
-    private val dayRequests by lazy { DayRequests(app.gateway) }
+    private val dayRequests get() = app.dayRequests
+
+    private sealed class Loaded {
+        data class Ok(val snapshot: UsageSnapshot, val at: Long) : Loaded()
+        data class Failed(val error: GatewayResult.Err) : Loaded()
+        object Invalid : Loaded()
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val b = FragmentOverviewBinding.inflate(inflater, container, false)
@@ -49,7 +56,7 @@ class OverviewFragment : BaseFragment() {
         b.chipWeek.setOnClickListener { switchPeriod("week") }
         b.chip7d.setOnClickListener { switchPeriod("7d") }
         b.chip30d.setOnClickListener { switchPeriod("30d") }
-        b.refresh.setOnClickListener { load(animate = true) }
+        b.refresh.setOnClickListener { load(animate = true, force = true) }
         b.ranking.layoutManager = LinearLayoutManager(requireContext())
         b.ranking.adapter = adapter
 
@@ -81,55 +88,115 @@ class OverviewFragment : BaseFragment() {
         b.chip30d.isSelected = period == "30d"
     }
 
-    private fun load(animate: Boolean) {
+    private fun load(animate: Boolean, force: Boolean = false) {
         val b = binding ?: return
         val conn = app.connection()
         if (conn == null) {
             b.status.text = "未配置连接，请到设置页填写网关地址与 API key"
             return
         }
+        val key = cacheKey(conn)
+        if (loadingKey == key) return
         val version = ++loadVersion
-        val requested = when (period) {
-            "today" -> rollingSinceMidnight()
-            "week" -> thisWeekRange()
-            else -> period
-        }
-        b.status.text = "读取中…"
-        lifecycleScope.launch {
-            var result = fetch(conn, requested)
-            var parsed = parseUsage(result)
-            // Older gateways ignore "last:…"/ranges and answer with all history; use a preset.
-            if (parsed != null && parsed.period != requested) {
-                when (period) {
-                    "today" -> {
-                        result = fetch(conn, "today")
-                        parsed = parseUsage(result)
-                    }
-                    "week" -> {
-                        result = fetch(conn, "7d")
-                        parsed = parseUsage(result)
-                    }
-                }
-            }
-            if (version != loadVersion) return@launch
-            val view = binding ?: return@launch
-            when {
-                result is GatewayResult.Err -> {
-                    // Snapshot stamp first so truncation can never hide it.
-                    view.status.text = SpannableStringBuilder().apply {
-                        if (snapshot != null) append("快照 ${Fmt.clock(lastUpdatedMillis)} · ")
-                        append("读取失败", ForegroundColorSpan(ContextCompat.getColor(requireContext(), R.color.error)), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        append("：${describe(result)}")
-                    }
-                }
-                parsed == null -> view.status.text = "响应不可解析：usage 返回的不是预期结构"
-                else -> {
+
+        if (!force) {
+            app.cache.fresh(key)?.let { cached ->
+                val parsed = parseUsageBody(cached.body)
+                if (parsed != null) {
                     snapshot = parsed
-                    lastUpdatedMillis = System.currentTimeMillis()
+                    lastUpdatedMillis = cached.fetchedAtWall
                     render(animate)
+                    return
+                }
+            }
+            // Stale-while-revalidate: show the previous body while the refresh runs.
+            app.cache.get(key)?.let { stale ->
+                val parsed = parseUsageBody(stale.body)
+                if (parsed != null) {
+                    snapshot = parsed
+                    lastUpdatedMillis = stale.fetchedAtWall
+                    render(animate = false)
                 }
             }
         }
+
+        loadingKey = key
+        b.status.text = if (snapshot != null && !force) {
+            "缓存 ${Fmt.clock(lastUpdatedMillis)} · 更新中…"
+        } else {
+            "读取中…"
+        }
+        lifecycleScope.launch {
+            try {
+                val loaded = app.cache.singleFlight(key) {
+                    if (!force) {
+                        app.cache.fresh(key)?.let { cached ->
+                            parseUsageBody(cached.body)?.let {
+                                return@singleFlight Loaded.Ok(it, cached.fetchedAtWall)
+                            }
+                        }
+                    }
+                    val requested = when (period) {
+                        "today" -> rollingSinceMidnight()
+                        "week" -> thisWeekRange()
+                        else -> period
+                    }
+                    var result = fetch(conn, requested)
+                    var parsed = parseUsage(result)
+                    // Older gateways ignore "last:…"/ranges and answer with all history; use a preset.
+                    if (parsed != null && parsed.period != requested) {
+                        when (period) {
+                            "today" -> {
+                                result = fetch(conn, "today")
+                                parsed = parseUsage(result)
+                            }
+                            "week" -> {
+                                result = fetch(conn, "7d")
+                                parsed = parseUsage(result)
+                            }
+                        }
+                    }
+                    when {
+                        result is GatewayResult.Err -> Loaded.Failed(result)
+                        parsed == null -> Loaded.Invalid
+                        else -> {
+                            app.cache.put(key, (result as GatewayResult.Ok).body)
+                            Loaded.Ok(parsed, app.cache.get(key)?.fetchedAtWall ?: System.currentTimeMillis())
+                        }
+                    }
+                }
+                if (version != loadVersion) return@launch
+                val view = binding ?: return@launch
+                when (loaded) {
+                    is Loaded.Ok -> {
+                        snapshot = loaded.snapshot
+                        lastUpdatedMillis = loaded.at
+                        render(animate)
+                    }
+                    is Loaded.Failed -> {
+                        // Snapshot stamp first so truncation can never hide it.
+                        view.status.text = SpannableStringBuilder().apply {
+                            if (snapshot != null) append("快照 ${Fmt.clock(lastUpdatedMillis)} · ")
+                            append("读取失败", ForegroundColorSpan(ContextCompat.getColor(requireContext(), R.color.error)), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            append("：${describe(loaded.error)}")
+                        }
+                    }
+                    Loaded.Invalid -> view.status.text = "响应不可解析：usage 返回的不是预期结构"
+                }
+            } finally {
+                if (loadingKey == key) loadingKey = null
+            }
+        }
+    }
+
+    private fun cacheKey(conn: ConnectionSettings): String {
+        val day = LocalDate.now()
+        val slot = when (period) {
+            "today" -> "today:$day"
+            "week" -> "week:${day.with(DayOfWeek.MONDAY)}"
+            else -> "$period:$day"
+        }
+        return "${conn.base}|usage|$slot"
     }
 
     private fun render(animate: Boolean) {
@@ -261,9 +328,10 @@ class OverviewFragment : BaseFragment() {
         }
 
     private fun parseUsage(result: GatewayResult): UsageSnapshot? =
-        (result as? GatewayResult.Ok)?.let { ok ->
-            runCatching { UsageSnapshot.parse(ok.body) }.getOrNull()
-        }
+        (result as? GatewayResult.Ok)?.let { parseUsageBody(it.body) }
+
+    private fun parseUsageBody(body: String): UsageSnapshot? =
+        runCatching { UsageSnapshot.parse(body) }.getOrNull()
 
     /** Monday through Sunday of the device's current week, as the gateway's picked range. */
     private fun thisWeekRange(): String {
