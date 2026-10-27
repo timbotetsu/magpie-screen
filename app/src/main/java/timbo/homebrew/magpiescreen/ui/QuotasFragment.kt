@@ -39,6 +39,8 @@ class QuotasFragment : BaseFragment() {
     private var windowColors: Map<String, Int> = emptyMap()
     /** false: month axis; true: week axis. */
     private var weeklyTrend = false
+    /** false: show remaining; true: show used. */
+    private var showUsed = false
     private var lastUpdatedMillis = 0L
     private var loadVersion = 0
     private var loadingKey: String? = null
@@ -55,6 +57,12 @@ class QuotasFragment : BaseFragment() {
         val b = FragmentQuotasBinding.inflate(inflater, container, false)
         binding = b
         b.refresh.setOnClickListener { load(force = true) }
+        val toggleUsed = View.OnClickListener {
+            showUsed = !showUsed
+            renderCards(b, animate = true)
+        }
+        b.cardsPanel.setOnClickListener(toggleUsed)
+        b.cards.setOnClickListener(toggleUsed)
         b.trend.setOnClickListener {
             weeklyTrend = !weeklyTrend
             renderHistory(b, animate = true)
@@ -305,6 +313,9 @@ class QuotasFragment : BaseFragment() {
             ).apply { if (index == 0) topMargin = dp(5) }
         }
         val remaining = percentOf(window)
+        val used = usedPercentOf(window)
+        val shown = if (showUsed) used else remaining
+        val critical = shown != null && (if (showUsed) shown >= 90 else shown <= 10)
         val head = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -316,23 +327,23 @@ class QuotasFragment : BaseFragment() {
                 when {
                     window.unlimited -> "不限量"
                     window.text != null -> window.text
-                    remaining != null -> "剩余 ${Fmt.percent(remaining / 100.0)}"
+                    shown != null -> "${if (showUsed) "已用" else "剩余"} ${Fmt.percent(shown / 100.0)}"
                     else -> "未提供"
                 },
                 11,
-                if (remaining != null && remaining <= 10) R.color.error else R.color.accent,
+                if (critical) R.color.error else R.color.accent,
             ).apply {
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
-                if (remaining == null || remaining > 10) setTextColor(seriesColor)
+                if (!critical) setTextColor(seriesColor)
             },
         )
         block.addView(head)
 
-        if (remaining != null && !window.unlimited && window.text == null) {
+        if (shown != null && !window.unlimited && window.text == null) {
             val bar = ProgressBar(requireContext(), null, android.R.attr.progressBarStyleHorizontal).apply {
                 max = 100
-                progress = if (animate) 0 else remaining
-                val fill = if (remaining <= 10) R.color.error else R.color.bar
+                progress = if (animate) 0 else shown
+                val fill = if (critical) R.color.error else R.color.bar
                 progressTintList = android.content.res.ColorStateList.valueOf(context.getColor(fill))
                 progressBackgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.line))
                 layoutParams = LinearLayout.LayoutParams(
@@ -344,8 +355,8 @@ class QuotasFragment : BaseFragment() {
                 }
             }
             block.addView(bar)
-            if (animate && remaining > 0) {
-                ObjectAnimator.ofInt(bar, "progress", 0, remaining).apply {
+            if (animate && shown > 0) {
+                ObjectAnimator.ofInt(bar, "progress", 0, shown).apply {
                     duration = 380L
                     interpolator = DecelerateInterpolator()
                     start()
@@ -367,6 +378,11 @@ class QuotasFragment : BaseFragment() {
     private fun percentOf(window: QuotaWindow): Int? {
         val remaining = window.remaining ?: window.used?.let { 100.0 - it }
         return remaining?.coerceIn(0.0, 100.0)?.roundToInt()
+    }
+
+    private fun usedPercentOf(window: QuotaWindow): Int? {
+        val used = window.used ?: window.remaining?.let { 100.0 - it }
+        return used?.coerceIn(0.0, 100.0)?.roundToInt()
     }
 
     private fun renderHistory(b: FragmentQuotasBinding, animate: Boolean = false) {
