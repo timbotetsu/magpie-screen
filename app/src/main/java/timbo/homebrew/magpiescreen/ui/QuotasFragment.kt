@@ -37,13 +37,15 @@ class QuotasFragment : BaseFragment() {
     private var selected: String? = null
     private var loadError: String? = null
     private var windowColors: Map<String, Int> = emptyMap()
-    /** false: month axis; true: week axis. */
-    private var weeklyTrend = false
+    private var trendMode = TrendMode.FIVE_HOURS
+    private var trendModes: List<TrendMode> = emptyList()
     /** false: show remaining; true: show used. */
     private var showUsed = false
     private var lastUpdatedMillis = 0L
     private var loadVersion = 0
     private var loadingKey: String? = null
+
+    private enum class TrendMode { FIVE_HOURS, WEEK, MONTH }
 
     private data class Loaded(
         val cardsBody: String?,
@@ -64,10 +66,14 @@ class QuotasFragment : BaseFragment() {
         b.cardsPanel.setOnClickListener(toggleUsed)
         b.cards.setOnClickListener(toggleUsed)
         b.trend.setOnClickListener {
-            weeklyTrend = !weeklyTrend
-            renderHistory(b, animate = true)
-            b.trendMode.alpha = 0f
-            b.trendMode.animate().alpha(1f).setDuration(180L).start()
+            val modes = trendModes
+            if (modes.size > 1) {
+                val index = modes.indexOf(trendMode)
+                trendMode = if (index >= 0) modes[(index + 1) % modes.size] else modes.first()
+                renderHistory(b, animate = true)
+                b.trendMode.alpha = 0f
+                b.trendMode.animate().alpha(1f).setDuration(180L).start()
+            }
         }
         load()
         return b.root
@@ -385,37 +391,58 @@ class QuotasFragment : BaseFragment() {
         return used?.coerceIn(0.0, 100.0)?.roundToInt()
     }
 
+    private fun trendLabel(mode: TrendMode): String = when (mode) {
+        TrendMode.FIVE_HOURS -> "5小时"
+        TrendMode.WEEK -> "周"
+        TrendMode.MONTH -> "月"
+    }
+
     private fun renderHistory(b: FragmentQuotasBinding, animate: Boolean = false) {
         val entries = history.filter { selected == null || it.provider == selected }
         val windows = entries.flatMap { entry -> entry.lines }
             .filter { it.points.size >= 2 }
             .sortedBy { it.name }
 
-        // The axis is the month by default; tapping the chart zooms it to the current week.
+        // The axis starts at 5 hours and cycles 5h -> week -> month on tap.
         val bounds = windows.mapNotNull { line ->
             val start = line.windowStart?.let { parseIsoMillis(it) }
             val reset = line.windowReset?.let { parseIsoMillis(it) }
             if (start == null || reset == null || reset <= start) null else Triple(line, start, reset)
         }
-        val monthly = bounds.maxByOrNull { it.third - it.second }
+        val fiveHour = bounds
+            .filter { (it.third - it.second) in (4 * HOUR_MS)..(6 * HOUR_MS) }
+            .minByOrNull { kotlin.math.abs(it.third - it.second - 5 * HOUR_MS) }
         val weekly = bounds
             .filter { (it.third - it.second) in (2 * DAY_MS)..(10 * DAY_MS) }
             .minByOrNull { kotlin.math.abs(it.third - it.second - WEEK_MS) }
-        val canToggle = monthly != null && weekly != null
-        if (!canToggle) weeklyTrend = false
-        val axis = if (weeklyTrend) weekly else monthly
+        val monthly = bounds.maxByOrNull { it.third - it.second }
+        val modes = listOfNotNull(
+            fiveHour?.let { TrendMode.FIVE_HOURS to it },
+            weekly?.let { TrendMode.WEEK to it },
+            monthly?.let { TrendMode.MONTH to it },
+        ).distinctBy { it.second.first.name }
+        trendModes = modes.map { it.first }
+        val current = modes.firstOrNull { it.first == trendMode } ?: modes.firstOrNull()
+        if (current != null) trendMode = current.first
+        val axis = current?.second
         b.titleHistory.visibility = if (axis != null) View.VISIBLE else View.GONE
         b.trend.visibility = if (axis != null) View.VISIBLE else View.GONE
         b.trendEmpty.visibility = if (axis != null) View.GONE else View.VISIBLE
         if (axis == null) {
+            trendModes = emptyList()
             b.trendMode.visibility = View.GONE
+            b.trend.isClickable = false
             return
         }
-        b.trendMode.visibility = if (canToggle) View.VISIBLE else View.GONE
-        b.trendMode.text = if (weeklyTrend) {
-            "当前按周展示，点击图表切换按月展示"
+        val canToggle = modes.size > 1
+        if (canToggle) {
+            val index = modes.indexOfFirst { it.first == trendMode }
+            val next = modes[(index + 1) % modes.size].first
+            b.trendMode.text =
+                "当前按${trendLabel(trendMode)}展示，点击图表切换成按${trendLabel(next)}展示"
+            b.trendMode.visibility = View.VISIBLE
         } else {
-            "当前按月展示，点击图表切换按周展示"
+            b.trendMode.visibility = View.GONE
         }
         b.trend.isClickable = canToggle
 
@@ -512,6 +539,7 @@ class QuotasFragment : BaseFragment() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private companion object {
+        const val HOUR_MS = 60L * 60 * 1000
         const val DAY_MS = 24L * 60 * 60 * 1000
         const val WEEK_MS = 7L * DAY_MS
     }

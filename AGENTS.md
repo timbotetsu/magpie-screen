@@ -24,14 +24,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `data/AppPrefs.kt` | 地址 + key（EncryptedSharedPreferences，失败回退） | `SettingsFragment` |
 | `ui/OverviewFragment.kt` | 总览：今日/本周/7日/30日、KPI、本地 00–23 柱状图、排行、点柱气泡；请求版本号防竞态、走缓存 | `SeriesChartView`、`BubbleView`、`DayRequests`、`Fmt` |
 | `ui/RequestsFragment.kt` | 18 周热力图 + 点格气泡、走缓存 | `HeatmapView`、`DayRequests`、`Fmt` |
-| `ui/QuotasFragment.kt` | 订阅卡片（剩余/已用切换）+ 月/周趋势切换 + 速度判定、走缓存 | `QuotaTrendView`、`Parse.Quotas`、`Fmt` |
+| `ui/QuotasFragment.kt` | 订阅卡片（剩余/已用切换）+ 5小时/周/月趋势切换 + 速度判定、走缓存 | `QuotaTrendView`、`Parse.Quotas`、`Fmt` |
 | `ui/SettingsFragment.kt` | 连接保存、能力自检 | `Gateway`、`Parse` |
 | `ui/BaseFragment.kt` | 每 1 分钟检查缓存（`onRefreshTick`），5 分钟内不发请求；回前台先查缓存；页面可见时保持屏幕常亮 | 各页 `onRefreshTick()` 实现、`ResponseCache` |
 | `ui/BubbleView.kt` | 唯一的气泡实现（两侧共用） | — |
 | `ui/DayRequests.kt` | 共享的按天明细缓存（5 分钟 TTL、single-flight）+ 按模型聚合 | 500 条/页、3000 行上限 |
 | `ui/SeriesChartView.kt` | 柱状图与点按回调 | `OverviewFragment` |
 | `ui/HeatmapView.kt` | 日历热力图；月份标签只标完整月份 | `RequestsFragment` |
-| `ui/QuotaTrendView.kt` | 额度趋势：月/周轴、日网格、当前时刻虚线 | `QuotasFragment` |
+| `ui/QuotaTrendView.kt` | 额度趋势：5小时/周/月轴、日网格、当前时刻虚线 | `QuotasFragment` |
 | `ui/Fmt.kt` | 数字格式化；网关时间戳 → 设备时区；网关自己的日历日 | 所有时间展示、`FmtTest` |
 
 ## 必须遵守的不变量
@@ -52,8 +52,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - 点柱子 / 点热力图格子 → 用 `BubbleView.show(...)`，5 秒自动消失、点外部关闭；气泡内容：时间范围 + 请求数/Token + 按模型三列（最多 4 行，多出写「…还有 N 个模型」）。
 - 总览周期 chip 只有今日/本周/7日/30日；只切换时间窗口，不弹气泡。
 - 总览小时柱状图固定本地 00–23：按本地小时放桶，缺失小时补 0，点空小时不弹气泡。
-- 额度趋势默认月窗口；点击图表切换周窗口，只重绘不重新请求；切换状态不持久化，切页重建后回到月视图。图表背景按天画格，白色虚线标记当前时刻，每个计费窗口各有一根「匀速用完」虚线。
-- 总览首次进入、切周期、点刷新时，柱状图和模型排行条从 0 生长；额度页进入、刷新或切换供应商时，三条进度条从 0 生长；点左侧订阅额度区域在剩余/已用之间切换，文字和进度条一起切换。1 分钟缓存检查命中时不播放动画。额度趋势点击切换时只做 x 轴缩放过渡，月线保持可见；数据刷新不播放。
+- 额度趋势默认 5 小时窗口；点击图表按 5小时 → 周 → 月 → 5小时 循环，只重绘不重新请求；切换状态不持久化，切页重建后回到 5 小时视图。图表背景按天画格，白色虚线标记当前时刻，每个计费窗口各有一根「匀速用完」虚线。
+- 总览首次进入、切周期、点刷新时，柱状图和模型排行条从 0 生长；额度页进入、刷新或切换供应商时，三条进度条从 0 生长；点左侧订阅额度区域在剩余/已用之间切换，文字和进度条一起切换。1 分钟缓存检查命中时不播放动画。额度趋势点击循环 5小时/周/月 时只做 x 轴缩放过渡，各窗口曲线保持可见；数据刷新不播放。
 - 刷新节奏集中在 `BaseFragment`：可见时每 `CHECK_INTERVAL_MS`（1 分钟）做一次缓存检查，只有超过 `ResponseCache.DEFAULT_TTL_MS`（5 分钟）才发请求；回前台同样先查缓存；`onStop` 必须让定时器和 `FLAG_KEEP_SCREEN_ON` 都停下。设置页覆盖为空实现（表单不该被自动重置）。
 - 排名行不可点击。
 - 加载失败时保留上一次成功的数据，状态行写明失败原因；总览额外显示「快照 HH:mm:ss」。
@@ -79,7 +79,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---|---|---|---|
 | `Parse.kt` 里 `Concurrency` / `ActiveRequest` / `Routes`（第 338–434 行）与 `Endpoints.ROUTE` | 约 97 行 + `RouteAndConcurrencyTest.kt` 69 行 | 运行时零调用，只被单测使用 | 它们是网关 `/v1/magpie/concurrency`、`/route` 的响应契约；将来做「实时请求 / 路由追踪」时直接可用。`Endpoints.CONCURRENCY` 仍被设置页能力自检使用，不能删 |
 | `RequestsPage` 的 `through/direct/reported/isConsistent` | 约 12 行 | UI 不读，但 `isConsistent` 有单测 | 请求页已改成热力图，不再展示这些分项；保留可随时恢复明细页 |
-| `QuotasFragment` 518 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
+| `QuotasFragment` 546 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
 | 三个数据页各自的缓存加载编排（fresh / stale / force / single-flight） | 约 100 行重复，页面加载流程没有纯 JVM 测试 | 新增页面或修改 TTL、状态行规则时要同步三处 | 目前只有 3 个数据页，抽 `CachedPageLoader` 的收益还不抵抽象成本；新增第 4 个数据页前先抽 |
 | 三个 Fragment 各一个 1 行私有 `dp()` | 3 行 | 无 | 合并要多一个文件，收益不抵成本 |
 
