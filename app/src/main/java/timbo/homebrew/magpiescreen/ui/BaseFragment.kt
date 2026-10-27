@@ -1,12 +1,12 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import ai.usemagpie.dashboard.MainActivity
-import ai.usemagpie.dashboard.net.GatewayError
-import ai.usemagpie.dashboard.net.GatewayResult
+import timbo.homebrew.magpiescreen.MainActivity
+import timbo.homebrew.magpiescreen.net.GatewayError
+import timbo.homebrew.magpiescreen.net.GatewayResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive

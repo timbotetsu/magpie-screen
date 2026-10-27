@@ -50,7 +50,7 @@
         android:textColor="@color/muted"
         android:textSize="10sp" />
 
-    <ai.usemagpie.dashboard.ui.HeatmapView
+    <timbo.homebrew.magpiescreen.ui.HeatmapView
         android:id="@+id/heatmap"
         android:layout_width="match_parent"
         android:layout_height="0dp"

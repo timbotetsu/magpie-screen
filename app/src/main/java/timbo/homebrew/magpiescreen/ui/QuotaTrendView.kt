@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.content.Context
 import android.graphics.Canvas
@@ -7,7 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
-import ai.usemagpie.dashboard.R
+import timbo.homebrew.magpiescreen.R
 
 /**
  * Quota trend on the axis of the longest window: dashed lines show the pace that would use a

@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.os.Bundle
 import android.text.InputType
@@ -6,15 +6,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.lifecycleScope
-import ai.usemagpie.dashboard.data.Quotas
-import ai.usemagpie.dashboard.data.RequestsPage
-import ai.usemagpie.dashboard.data.UsageSnapshot
-import ai.usemagpie.dashboard.databinding.FragmentSettingsBinding
-import ai.usemagpie.dashboard.net.ConnectionSettings
-import ai.usemagpie.dashboard.net.Endpoints
-import ai.usemagpie.dashboard.net.GatewayResult
-import ai.usemagpie.dashboard.net.UrlCheck
-import ai.usemagpie.dashboard.net.UrlRules
+import timbo.homebrew.magpiescreen.data.Quotas
+import timbo.homebrew.magpiescreen.data.RequestsPage
+import timbo.homebrew.magpiescreen.data.UsageSnapshot
+import timbo.homebrew.magpiescreen.databinding.FragmentSettingsBinding
+import timbo.homebrew.magpiescreen.net.ConnectionSettings
+import timbo.homebrew.magpiescreen.net.Endpoints
+import timbo.homebrew.magpiescreen.net.GatewayResult
+import timbo.homebrew.magpiescreen.net.UrlCheck
+import timbo.homebrew.magpiescreen.net.UrlRules
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

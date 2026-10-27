@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.net
+package timbo.homebrew.magpiescreen.net
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

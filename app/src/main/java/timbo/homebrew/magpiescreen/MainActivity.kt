@@ -1,18 +1,18 @@
-package ai.usemagpie.dashboard
+package timbo.homebrew.magpiescreen
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
-import ai.usemagpie.dashboard.data.AppPrefs
-import ai.usemagpie.dashboard.databinding.ActivityMainBinding
-import ai.usemagpie.dashboard.net.ConnectionSettings
-import ai.usemagpie.dashboard.net.GatewayClient
-import ai.usemagpie.dashboard.net.UrlCheck
-import ai.usemagpie.dashboard.net.UrlRules
-import ai.usemagpie.dashboard.ui.OverviewFragment
-import ai.usemagpie.dashboard.ui.QuotasFragment
-import ai.usemagpie.dashboard.ui.RequestsFragment
-import ai.usemagpie.dashboard.ui.SettingsFragment
+import timbo.homebrew.magpiescreen.data.AppPrefs
+import timbo.homebrew.magpiescreen.databinding.ActivityMainBinding
+import timbo.homebrew.magpiescreen.net.ConnectionSettings
+import timbo.homebrew.magpiescreen.net.GatewayClient
+import timbo.homebrew.magpiescreen.net.UrlCheck
+import timbo.homebrew.magpiescreen.net.UrlRules
+import timbo.homebrew.magpiescreen.ui.OverviewFragment
+import timbo.homebrew.magpiescreen.ui.QuotasFragment
+import timbo.homebrew.magpiescreen.ui.RequestsFragment
+import timbo.homebrew.magpiescreen.ui.SettingsFragment
 
 class MainActivity : AppCompatActivity() {
 

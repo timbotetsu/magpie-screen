@@ -1,4 +1,4 @@
-package ai.usemagpie.dashboard.ui
+package timbo.homebrew.magpiescreen.ui
 
 import android.os.Bundle
 import android.text.SpannableStringBuilder
@@ -11,13 +11,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import ai.usemagpie.dashboard.R
-import ai.usemagpie.dashboard.data.Group
-import ai.usemagpie.dashboard.data.UsageSnapshot
-import ai.usemagpie.dashboard.databinding.FragmentOverviewBinding
-import ai.usemagpie.dashboard.databinding.ItemGroupBinding
-import ai.usemagpie.dashboard.net.Endpoints
-import ai.usemagpie.dashboard.net.GatewayResult
+import timbo.homebrew.magpiescreen.R
+import timbo.homebrew.magpiescreen.data.Group
+import timbo.homebrew.magpiescreen.data.UsageSnapshot
+import timbo.homebrew.magpiescreen.databinding.FragmentOverviewBinding
+import timbo.homebrew.magpiescreen.databinding.ItemGroupBinding
+import timbo.homebrew.magpiescreen.net.Endpoints
+import timbo.homebrew.magpiescreen.net.GatewayResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

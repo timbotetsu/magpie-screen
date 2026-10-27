@@ -58,7 +58,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - 版本在 `app/build.gradle.kts`：`versionCode` / `versionName`，发版前递增 `versionCode`。
 - `assembleRelease` 产物未签名（`isMinifyEnabled = false`），发布需要自备 keystore。
-- `applicationId = ai.usemagpie.dashboard`，`minSdk 27`，`targetSdk 35`。
+- `applicationId = timbo.homebrew.magpiescreen`，`minSdk 27`，`targetSdk 35`。
 
 ## 已知取舍（不影响发布，改动前先确认）
 
