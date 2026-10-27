@@ -439,10 +439,9 @@ class QuotasFragment : BaseFragment() {
         )
 
         val series = ArrayList<QuotaTrendView.Series>()
-        // Dashed pace lines: the two longest windows, shown in both axis modes.
+        // Dashed pace lines: one per window, from its start to its reset.
         bounds
             .sortedByDescending { it.third - it.second }
-            .take(2)
             .forEach { (line, start, reset) ->
                 val color = windowColors[line.name] ?: return@forEach
                 series += QuotaTrendView.Series(
