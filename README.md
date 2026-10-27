@@ -10,9 +10,9 @@
 
 | 页面 | 内容 |
 |---|---|
-| 总览 | KPI 四格（总 Token / 缓存命中率 / 请求数 / 错误数）、24 小时柱状图（每根柱标 token 数，点柱子弹出该小时的请求数、Token 与按模型的拆分）、模型用量前 3、底部一行输入/输出/缓存读/缓存写/推理 |
-| 请求 | 近 26 周日历热力图（左侧周几、顶部月份带年份），每格一天，点格子弹出当天请求数/Token 与按模型的拆分 |
-| 额度 | 订阅额度卡片（各计费窗口的剩余百分比 + 进度条 + 重置时间）与额度趋势：横轴取最长窗口，虚线是「匀速用完」的参考线，实线是真实剩余，标题右侧给出「按此速度，能撑到重置 / 无法撑到重置」 |
+| 总览 | 今日/本周/7日/30日切换；KPI 四格（总 Token / 缓存命中率 / 请求数 / 错误数）、本地 00–23 柱状图（每根柱标 token 数，点柱子弹出该小时的请求数、Token 与按模型的拆分）、模型用量前 3、底部一行输入/输出/缓存读/缓存写/推理 |
+| 请求 | 近 18 周日历热力图（左侧周几、顶部月份），每格一天，点格子弹出当天请求数/Token 与按模型的拆分 |
+| 额度 | 订阅额度卡片（各计费窗口的剩余百分比 + 进度条 + 重置时间）与额度趋势：默认按月的窗口展示，点图表切换按周；背景每天一格，白色虚线标记当前时刻；虚线是「匀速用完」的参考线，实线是真实剩余，标题右侧给出「按此速度，能撑到重置 / 无法撑到重置」 |
 | 设置 | 网关地址 + API key（可显示）、保存并测试连接，逐项列出网关能力（统计 / 额度 / 实时并发 / 请求明细） |
 
 界面文案为中文，数值格式统一由 `Fmt` 处理（`3.14M`、`72.2%`、`1.2K`、`10-27 19:36`）。
@@ -25,7 +25,7 @@ App 只读 Magpie 网关的管理接口，全部为 `GET`，带 `Authorization: 
 
 | 接口 | 用途 |
 |---|---|
-| `/v1/magpie/usage?period=today\|7d\|30d\|all` | 总览的 KPI、趋势桶、模型排行 |
+| `/v1/magpie/usage?period=today\|7d\|30d\|last:<duration>\|<from>..<to>` | 总览的 KPI、趋势桶、模型排行（今日用 `last:`，本周用日期区间） |
 | `/v1/magpie/usage/requests?period=…&offset=&limit=`，或 `?day=YYYY-MM-DD` | 请求页与气泡的按天明细（单页上限 500 条，App 自动翻页并缓存） |
 | `/v1/magpie/quotas?kept=1` | 额度卡片（订阅窗口、剩余百分比、重置时间） |
 | `/v1/magpie/quotas/history` | 额度趋势的历史采样点 |
@@ -33,7 +33,8 @@ App 只读 Magpie 网关的管理接口，全部为 `GET`，带 `Authorization: 
 
 约定：
 
-- **时间是绝对时刻，展示用设备时区**：网关可能以 `Z`（UTC 服务器）或 `+08:00` 序列化，App 统一转成设备时区显示；`?day=` 按天查询仍使用网关自己的日历日，所以网关的「今日」边界仍由网关时区决定（例如 UTC 网关的今日从北京 08:00 开始）。
+- **时间是绝对时刻，展示用设备时区**：网关可能以 `Z`（UTC 服务器）或 `+08:00` 序列化，App 统一转成设备时区显示；`?day=` 按天查询仍使用网关自己的日历日。
+- **「今日」按设备日历**：请求 `last:<本地零点到现在>`，所以 KPI 和固定的本地 00–23 小时图都是本地日；「本周」请求本地周一到周日的日期区间，`7日/30日` 用网关预设。网关不支持滚动窗口/日期区间时分别回退 `today`/`7d`。
 - 网关按天聚合的历史通常只保留最近约 30 天，所以热力图前期大部分格子是空的，随时间自然补齐。
 - 地址规则见 `net/UrlRules`：必须 `http(s)://`，去掉结尾 `/v1` 以免重复，不接受用户名密码、查询参数或 fragment。
 
@@ -42,7 +43,7 @@ App 只读 Magpie 网关的管理接口，全部为 `GET`，带 `Authorization: 
 需要 JDK 17、Android SDK 35。
 
 ```bash
-./gradlew test            # 单元测试（URL 规则、token 口径、route/concurrency 解析）
+./gradlew test            # 单元测试（URL 规则、token 口径、时区展示、route/concurrency 解析）
 ./gradlew assembleDebug   # app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -58,18 +59,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## 项目结构
 
 ```
-app/src/main/java/ai/usemagpie/dashboard/
+app/src/main/java/timbo/homebrew/magpiescreen/
   MainActivity.kt          底栏四个入口，切页即重建 Fragment
   net/Gateway.kt           OkHttp 客户端、错误分类、地址规则、接口路径
   data/AppPrefs.kt         地址与 key（EncryptedSharedPreferences，Keystore 不可用时退化为普通偏好）
   data/Parse.kt            网关 JSON → 数据类（usage / requests / quotas / limit / concurrency / route）
-  ui/OverviewFragment.kt   总览：KPI、柱状图、排行、点柱气泡
-  ui/RequestsFragment.kt   请求：热力图、点格气泡
-  ui/QuotasFragment.kt     额度：订阅卡片 + 趋势 + 速度判定
+  ui/OverviewFragment.kt   总览：周期切换、KPI、本地 00–23 柱状图、排行、点柱气泡
+  ui/RequestsFragment.kt   请求：18 周热力图、点格气泡
+  ui/QuotasFragment.kt     额度：订阅卡片 + 月/周趋势切换 + 速度判定
   ui/SettingsFragment.kt   设置：连接与能力自检
   ui/SeriesChartView.kt    柱状图（总览用；点按回调报告柱索引）
-  ui/HeatmapView.kt        日历热力图（53/26 周 × 7 天，可点）
-  ui/QuotaTrendView.kt     额度趋势折线（多窗口、实线/虚线）
+  ui/HeatmapView.kt        日历热力图（18 周 × 7 天，可点；月份标签只标完整月份）
+  ui/QuotaTrendView.kt     额度趋势折线（月/周轴、日网格、当前时刻虚线、实线/虚线）
   ui/BubbleView.kt         统一的小气泡（标题 + 总计 + 三列表格 + 自动夹边 + 定时关闭）
   ui/DayRequests.kt        按天分页拉请求明细并按模型聚合，按日期缓存
   ui/Fmt.kt                数字/时间格式化，网关时间戳转设备时区

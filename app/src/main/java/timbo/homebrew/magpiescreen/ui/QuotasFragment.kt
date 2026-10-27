@@ -36,11 +36,17 @@ class QuotasFragment : BaseFragment() {
     private var selected: String? = null
     private var loadError: String? = null
     private var windowColors: Map<String, Int> = emptyMap()
+    /** false: month axis; true: week axis. */
+    private var weeklyTrend = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val b = FragmentQuotasBinding.inflate(inflater, container, false)
         binding = b
         b.refresh.setOnClickListener { load() }
+        b.trend.setOnClickListener {
+            weeklyTrend = !weeklyTrend
+            renderHistory(b)
+        }
         load()
         return b.root
     }
@@ -253,17 +259,33 @@ class QuotasFragment : BaseFragment() {
             .filter { it.points.size >= 2 }
             .sortedBy { it.name }
 
-        // The axis is the longest window: everything else is placed inside it.
+        // The axis is the month by default; tapping the chart zooms it to the current week.
         val bounds = windows.mapNotNull { line ->
             val start = line.windowStart?.let { parseIsoMillis(it) }
             val reset = line.windowReset?.let { parseIsoMillis(it) }
             if (start == null || reset == null || reset <= start) null else Triple(line, start, reset)
         }
-        val axis = bounds.maxByOrNull { it.third - it.second }
+        val monthly = bounds.maxByOrNull { it.third - it.second }
+        val weekly = bounds
+            .filter { (it.third - it.second) in (2 * DAY_MS)..(10 * DAY_MS) }
+            .minByOrNull { kotlin.math.abs(it.third - it.second - WEEK_MS) }
+        val canToggle = monthly != null && weekly != null
+        if (!canToggle) weeklyTrend = false
+        val axis = if (weeklyTrend) weekly else monthly
         b.titleHistory.visibility = if (axis != null) View.VISIBLE else View.GONE
         b.trend.visibility = if (axis != null) View.VISIBLE else View.GONE
         b.trendEmpty.visibility = if (axis != null) View.GONE else View.VISIBLE
-        if (axis == null) return
+        if (axis == null) {
+            b.trendMode.visibility = View.GONE
+            return
+        }
+        b.trendMode.visibility = if (canToggle) View.VISIBLE else View.GONE
+        b.trendMode.text = if (weeklyTrend) {
+            "当前按周展示，点击图表切换按月展示"
+        } else {
+            "当前按月展示，点击图表切换按周展示"
+        }
+        b.trend.isClickable = canToggle
 
         val lastPoint = axis.first.points.lastOrNull()
         val nowMs = lastPoint?.first?.let { parseIsoMillis(it) }
@@ -285,18 +307,26 @@ class QuotasFragment : BaseFragment() {
         )
 
         val series = ArrayList<QuotaTrendView.Series>()
-        // Dashed pace lines: only the two longest windows, each from its own start to its own reset.
-        bounds.sortedByDescending { it.third - it.second }.take(2).forEach { (line, start, reset) ->
-            val color = windowColors[line.name] ?: return@forEach
-            series += QuotaTrendView.Series(
-                line.name,
-                color,
-                dashed = true,
-                points = listOf(QuotaTrendView.Point(start, 100.0), QuotaTrendView.Point(reset, 0.0)),
-            )
-        }
-        // Solid: what was actually measured.
+        val axisDuration = axis.third - axis.second
+        // Dashed pace lines: the two longest windows inside the visible span.
+        bounds
+            .filter { it.third - it.second <= axisDuration }
+            .sortedByDescending { it.third - it.second }
+            .take(2)
+            .forEach { (line, start, reset) ->
+                val color = windowColors[line.name] ?: return@forEach
+                series += QuotaTrendView.Series(
+                    line.name,
+                    color,
+                    dashed = true,
+                    points = listOf(QuotaTrendView.Point(start, 100.0), QuotaTrendView.Point(reset, 0.0)),
+                )
+            }
+        // Solid: what was actually measured, for windows no longer than the axis.
         windows.forEach { line ->
+            val start = line.windowStart?.let { parseIsoMillis(it) }
+            val reset = line.windowReset?.let { parseIsoMillis(it) }
+            if (start != null && reset != null && reset - start > axisDuration) return@forEach
             val points = line.points.mapNotNull { (at, left) ->
                 parseIsoMillis(at)?.let { QuotaTrendView.Point(it, left) }
             }
@@ -354,4 +384,9 @@ class QuotasFragment : BaseFragment() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val DAY_MS = 24L * 60 * 60 * 1000
+        const val WEEK_MS = 7L * DAY_MS
+    }
 }

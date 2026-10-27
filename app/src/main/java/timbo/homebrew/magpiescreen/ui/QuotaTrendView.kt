@@ -8,6 +8,8 @@ import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
 import timbo.homebrew.magpiescreen.R
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * Quota trend on the axis of the longest window: dashed lines show the pace that would use a
@@ -32,6 +34,17 @@ class QuotaTrendView @JvmOverloads constructor(
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.line)
         strokeWidth = 1f
+    }
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = context.getColor(R.color.line)
+        alpha = 110
+        strokeWidth = 1f
+    }
+    private val nowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = context.getColor(R.color.fg)
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f
+        pathEffect = DashPathEffect(floatArrayOf(6f, 5f), 0f)
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.muted)
@@ -74,6 +87,22 @@ class QuotaTrendView @JvmOverloads constructor(
         fun yOf(value: Double): Float = bottom - (value.coerceIn(0.0, 100.0) / 100.0).toFloat() * (bottom - top)
         fun xOf(time: Long): Float = (time - xStart).toFloat() / (xEnd - xStart).toFloat() * w
 
+        // Daily cells: one vertical line per local day, three horizontal quarter lines.
+        val zone = ZoneId.systemDefault()
+        for (i in 1..3) {
+            val y = top + (bottom - top) * i / 4f
+            canvas.drawLine(0f, y, w, y, gridPaint)
+        }
+        var day = Instant.ofEpochMilli(xStart).atZone(zone).toLocalDate().plusDays(1)
+        var boundary = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        var guard = 0
+        while (boundary <= xEnd && guard++ < 400) {
+            val x = xOf(boundary)
+            if (x >= 0f && x <= w) canvas.drawLine(x, top, x, bottom, gridPaint)
+            day = day.plusDays(1)
+            boundary = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        }
+
         canvas.drawLine(0f, top, w, top, axisPaint)
         canvas.drawLine(0f, bottom, w, bottom, axisPaint)
 
@@ -93,6 +122,10 @@ class QuotaTrendView @JvmOverloads constructor(
             }
             canvas.drawPath(path, linePaint)
         }
+
+        // The current moment, so "now" is readable against the window.
+        val nowX = xOf(System.currentTimeMillis())
+        if (nowX in 0f..w) canvas.drawLine(nowX, top, nowX, bottom, nowPaint)
 
         if (firstLabel.isNotEmpty()) {
             canvas.drawText(firstLabel, 2f, h - 4f, textPaint)
