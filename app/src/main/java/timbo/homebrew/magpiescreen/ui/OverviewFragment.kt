@@ -49,12 +49,12 @@ class OverviewFragment : BaseFragment() {
         b.chipWeek.setOnClickListener { switchPeriod("week") }
         b.chip7d.setOnClickListener { switchPeriod("7d") }
         b.chip30d.setOnClickListener { switchPeriod("30d") }
-        b.refresh.setOnClickListener { load() }
+        b.refresh.setOnClickListener { load(animate = true) }
         b.ranking.layoutManager = LinearLayoutManager(requireContext())
         b.ranking.adapter = adapter
 
         applyChips()
-        load()
+        load(animate = true)
         return b.root
     }
 
@@ -64,13 +64,13 @@ class OverviewFragment : BaseFragment() {
     }
 
     override fun onRefreshTick() {
-        load()
+        load(animate = false)
     }
 
     private fun switchPeriod(value: String) {
         period = value
         applyChips()
-        load()
+        load(animate = true)
     }
 
     private fun applyChips() {
@@ -81,7 +81,7 @@ class OverviewFragment : BaseFragment() {
         b.chip30d.isSelected = period == "30d"
     }
 
-    private fun load() {
+    private fun load(animate: Boolean) {
         val b = binding ?: return
         val conn = app.connection()
         if (conn == null) {
@@ -126,13 +126,13 @@ class OverviewFragment : BaseFragment() {
                 else -> {
                     snapshot = parsed
                     lastUpdatedMillis = System.currentTimeMillis()
-                    render()
+                    render(animate)
                 }
             }
         }
     }
 
-    private fun render() {
+    private fun render(animate: Boolean) {
         val b = binding ?: return
         val snap = snapshot ?: return
         val stats = snap.stats
@@ -166,6 +166,7 @@ class OverviewFragment : BaseFragment() {
                 allPointLabels = snap.bucket == "hour" || points.size <= 12,
                 maxLabel = false,
             ),
+            animate = animate,
         ) { value -> Fmt.compactShort(value.toLong()) }
         b.chart.onPointTap = { index -> showBucketBubble(index) }
 

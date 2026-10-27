@@ -45,7 +45,9 @@ class QuotasFragment : BaseFragment() {
         b.refresh.setOnClickListener { load() }
         b.trend.setOnClickListener {
             weeklyTrend = !weeklyTrend
-            renderHistory(b)
+            renderHistory(b, animate = true)
+            b.trendMode.alpha = 0f
+            b.trendMode.animate().alpha(1f).setDuration(180L).start()
         }
         load()
         return b.root
@@ -253,7 +255,7 @@ class QuotasFragment : BaseFragment() {
         return remaining?.coerceIn(0.0, 100.0)?.roundToInt()
     }
 
-    private fun renderHistory(b: FragmentQuotasBinding) {
+    private fun renderHistory(b: FragmentQuotasBinding, animate: Boolean = false) {
         val entries = history.filter { selected == null || it.provider == selected }
         val windows = entries.flatMap { entry -> entry.lines }
             .filter { it.points.size >= 2 }
@@ -335,7 +337,7 @@ class QuotasFragment : BaseFragment() {
             series += QuotaTrendView.Series(line.name, color, dashed = false, points = points)
         }
 
-        b.trend.setData(series, axis.second, axis.third, "", "")
+        b.trend.setData(series, axis.second, axis.third, "", "", animate = animate)
     }
 
     /** Grows the cards to the column height so the left side has no dead space. */

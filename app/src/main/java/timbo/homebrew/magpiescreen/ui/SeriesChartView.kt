@@ -1,5 +1,6 @@
 package timbo.homebrew.magpiescreen.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -7,6 +8,7 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import timbo.homebrew.magpiescreen.R
 import java.util.Locale
 
@@ -36,6 +38,8 @@ class SeriesChartView @JvmOverloads constructor(
     private var points: List<Point> = emptyList()
     private var formatter: (Double) -> String = { String.format(Locale.US, "%.0f", it) }
     private var style: Style = Style()
+    private var grow = 1f
+    private var animator: ValueAnimator? = null
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.accent) }
     private val dimBarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.line) }
@@ -53,11 +57,38 @@ class SeriesChartView @JvmOverloads constructor(
     }
     private val rect = RectF()
 
-    fun setData(points: List<Point>, style: Style = Style(), formatter: (Double) -> String) {
+    fun setData(
+        points: List<Point>,
+        style: Style = Style(),
+        animate: Boolean = false,
+        formatter: (Double) -> String,
+    ) {
+        animator?.cancel()
+        animator = null
         this.points = points
         this.formatter = formatter
         this.style = style
-        invalidate()
+        if (!animate || !isAttachedToWindow || points.isEmpty()) {
+            grow = 1f
+            invalidate()
+            return
+        }
+        grow = 0f
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 380L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                grow = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        super.onDetachedFromWindow()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -105,7 +136,7 @@ class SeriesChartView @JvmOverloads constructor(
         val barWidth = (slot * 0.62f).coerceAtLeast(1.5f)
         points.forEachIndexed { index, point ->
             val ratio = if (max <= 0.0) 0f else (point.value / max).toFloat()
-            val barHeight = available * ratio
+            val barHeight = available * ratio * grow
             val left = index * slot + (slot - barWidth) / 2f
             rect.set(left, chartBottom - barHeight, left + barWidth, chartBottom)
             canvas.drawRect(rect, if (point.value > 0.0) barPaint else dimBarPaint)
@@ -116,12 +147,15 @@ class SeriesChartView @JvmOverloads constructor(
                     // Long values ("459.47K") must not run into the neighbouring bar.
                     smallPaint.textSize = (12f * slot * 0.94f / smallPaint.measureText(text)).coerceIn(8f, 12f)
                 }
+                smallPaint.alpha = (255 * grow).toInt().coerceIn(0, 255)
                 val tx = left + barWidth / 2f - smallPaint.measureText(text) / 2f
                 canvas.drawText(text, tx, chartBottom - barHeight - 3f, smallPaint)
+                smallPaint.alpha = 255
             }
         }
 
         val labelY = h - 4f
+        smallPaint.alpha = 255
         if (style.allPointLabels) {
             smallPaint.textSize = 12f
             points.forEachIndexed { index, point ->

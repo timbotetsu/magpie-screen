@@ -38,7 +38,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 1. **屏幕预算固定**：状态栏 24dp + 底栏 36dp → 内容 260dp。总览页不允许滚动，任何新增块都要在同一预算内重排；热力图/额度页各自内部滚动。
 2. **Fragment 里不要用字段初始化器碰 `app`**：`private val x = Foo(app.gateway)` 会在 `onAttach` 之前执行并抛 `Fragment not attached to an activity`（踩过一次）。用 `by lazy` 或放到 `onCreateView`。
 3. **展示按设备时区，按天查询按网关日期**：网关时间戳是绝对时刻，不同网关会用不同 offset 序列化（`Z`、`+08:00`），展示（柱状图标签、气泡标题、热力图格子）一律用 `Fmt.localZoned()` / `Fmt.localDate()` 转成设备时区；只有 `/usage/requests?day=` 这类由网关自己解释的日期参数用 `Fmt.gatewayDate()`。不要直接截取时间戳前 10 位来展示，否则 UTC 网关下北京 00:00–07:59 的请求会被算到前一天。
-4. **图表 API 签名顺序**：`SeriesChartView.setData(points, style = …, formatter)` —— `style` 在 `formatter` 之前是为了保留尾随 lambda 写法（`setData(points) { … }`），调用点在 `OverviewFragment`；`QuotaTrendView.setData(series, xStart, xEnd, …)` 的调用点在 `QuotasFragment`。改签名要同步对应调用点。
+4. **图表 API 签名顺序**：`SeriesChartView.setData(points, style = …, animate = …, formatter)` —— `style`/`animate` 在 `formatter` 之前是为了保留尾随 lambda 写法（`setData(points) { … }`），调用点在 `OverviewFragment`；`QuotaTrendView.setData(series, xStart, xEnd, …, animate = …)` 的调用点在 `QuotasFragment`。改签名要同步对应调用点。
 5. **额度页只显示订阅卡**：不显示「本机 key 限制」；无卡片时给一行说明即可（历史上曾误加，已按要求删除）。
 6. **数据字段不臆造**：只渲染网关返回的字段，缺失用「未提供」；不要把余额、活跃天数、连续天数、热力图以外的指标编出来。
 7. **颜色与尺寸用 token**：`values/colors.xml`（含 `heat0..4`、`series1..4`、`bar`）和 `values/themes.xml` 的 style；不要在代码里硬编码十六进制或 dp 字号。
@@ -51,6 +51,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - 总览周期 chip 只有今日/本周/7日/30日；只切换时间窗口，不弹气泡。
 - 总览小时柱状图固定本地 00–23：按本地小时放桶，缺失小时补 0，点空小时不弹气泡。
 - 额度趋势默认月窗口；点击图表切换周窗口，只重绘不重新请求；切换状态不持久化，切页重建后回到月视图。图表背景按天画格，白色虚线标记当前时刻。
+- 总览首次进入、切周期、点刷新时播放柱状图生长动画；5 分钟自动刷新不播放。额度趋势点击切换时 x 轴缩放并交叉淡入淡出，数据刷新不播放。
 - 刷新节奏集中在 `BaseFragment`：可见时每 `REFRESH_INTERVAL_MS`（5 分钟）调一次 `onRefreshTick()`，回前台立即调；`onStop` 必须让定时器和 `FLAG_KEEP_SCREEN_ON` 都停下。设置页覆盖为空实现（表单不该被自动重置）。
 - 排名行不可点击。
 - 加载失败时保留上一次成功的数据，状态行写明失败原因；总览额外显示「快照 HH:mm:ss」。
@@ -76,7 +77,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---|---|---|---|
 | `Parse.kt` 里 `Concurrency` / `ActiveRequest` / `Routes`（第 338–434 行）与 `Endpoints.ROUTE` | 约 97 行 + `RouteAndConcurrencyTest.kt` 69 行 | 运行时零调用，只被单测使用 | 它们是网关 `/v1/magpie/concurrency`、`/route` 的响应契约；将来做「实时请求 / 路由追踪」时直接可用。`Endpoints.CONCURRENCY` 仍被设置页能力自检使用，不能删 |
 | `RequestsPage` 的 `through/direct/reported/isConsistent` | 约 12 行 | UI 不读，但 `isConsistent` 有单测 | 请求页已改成热力图，不再展示这些分项；保留可随时恢复明细页 |
-| `QuotasFragment` 392 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
+| `QuotasFragment` 394 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
 | 三个 Fragment 各一个 1 行私有 `dp()` | 3 行 | 无 | 合并要多一个文件，收益不抵成本 |
 
 要「零未使用代码」的发布版，删掉第一、二项即可：删 `Parse.kt` 第 338 行到文件末尾、`Endpoints.ROUTE`、`RouteAndConcurrencyTest.kt`，并在 `TokenMathTest` 去掉 `isConsistent` 两条断言，然后重新 `./gradlew test assembleDebug`。其余代码不依赖它们。

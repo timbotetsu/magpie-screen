@@ -1,5 +1,8 @@
 package timbo.homebrew.magpiescreen.ui
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.DashPathEffect
@@ -7,6 +10,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import timbo.homebrew.magpiescreen.R
 import java.time.Instant
 import java.time.ZoneId
@@ -26,8 +30,13 @@ class QuotaTrendView @JvmOverloads constructor(
     data class Series(val name: String, val color: Int, val dashed: Boolean, val points: List<Point>)
 
     private var series: List<Series> = emptyList()
+    private var oldSeries: List<Series> = emptyList()
     private var xStart: Long = 0
     private var xEnd: Long = 1
+    private var fromStart: Long = 0
+    private var fromEnd: Long = 1
+    private var progress = 1f
+    private var animator: ValueAnimator? = null
     private var firstLabel: String = ""
     private var lastLabel: String = ""
 
@@ -64,14 +73,69 @@ class QuotaTrendView @JvmOverloads constructor(
         xEnd: Long,
         firstLabel: String,
         lastLabel: String,
+        animate: Boolean = false,
     ) {
+        val nextEnd = xEnd.coerceAtLeast(xStart + 1)
+        // Read the current interpolated axis before cancel() snaps the old animator to its end.
+        val baseStart = currentStart()
+        val baseEnd = currentEnd()
+        animator?.cancel()
+        animator = null
+
+        val canAnimate = animate && isAttachedToWindow && this.xEnd - this.xStart > 1_000L
+        if (canAnimate) {
+            fromStart = baseStart
+            fromEnd = baseEnd
+            oldSeries = this.series
+            progress = 0f
+        } else {
+            fromStart = xStart
+            fromEnd = nextEnd
+            oldSeries = emptyList()
+            progress = 1f
+        }
         this.series = series.filter { it.points.size >= 2 }
         this.xStart = xStart
-        this.xEnd = xEnd.coerceAtLeast(xStart + 1)
+        this.xEnd = nextEnd
         this.firstLabel = firstLabel
         this.lastLabel = lastLabel
-        invalidate()
+
+        if (canAnimate) {
+            animator = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 320L
+                interpolator = DecelerateInterpolator()
+                addUpdateListener {
+                    progress = it.animatedValue as Float
+                    invalidate()
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        progress = 1f
+                        oldSeries = emptyList()
+                        animator = null
+                        invalidate()
+                    }
+                })
+                start()
+            }
+        } else {
+            invalidate()
+        }
     }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        super.onDetachedFromWindow()
+    }
+
+    private fun currentStart(): Long =
+        if (progress >= 1f) xStart
+        else (fromStart + (xStart - fromStart).toDouble() * progress).toLong()
+
+    private fun currentEnd(): Long =
+        if (progress >= 1f) xEnd
+        else (fromEnd + (xEnd - fromEnd).toDouble() * progress).toLong()
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -84,8 +148,11 @@ class QuotaTrendView @JvmOverloads constructor(
         val bottom = h - labelHeight
         if (bottom <= top) return
 
+        val start = currentStart()
+        val end = currentEnd().coerceAtLeast(start + 1)
         fun yOf(value: Double): Float = bottom - (value.coerceIn(0.0, 100.0) / 100.0).toFloat() * (bottom - top)
-        fun xOf(time: Long): Float = (time - xStart).toFloat() / (xEnd - xStart).toFloat() * w
+        fun xOf(time: Long): Float =
+            ((time - start).toDouble() / (end - start).toDouble() * w).toFloat()
 
         // Daily cells: one vertical line per local day, three horizontal quarter lines.
         val zone = ZoneId.systemDefault()
@@ -93,10 +160,10 @@ class QuotaTrendView @JvmOverloads constructor(
             val y = top + (bottom - top) * i / 4f
             canvas.drawLine(0f, y, w, y, gridPaint)
         }
-        var day = Instant.ofEpochMilli(xStart).atZone(zone).toLocalDate().plusDays(1)
+        var day = Instant.ofEpochMilli(start).atZone(zone).toLocalDate().plusDays(1)
         var boundary = day.atStartOfDay(zone).toInstant().toEpochMilli()
         var guard = 0
-        while (boundary <= xEnd && guard++ < 400) {
+        while (boundary <= end && guard++ < 400) {
             val x = xOf(boundary)
             if (x >= 0f && x <= w) canvas.drawLine(x, top, x, bottom, gridPaint)
             day = day.plusDays(1)
@@ -106,22 +173,32 @@ class QuotaTrendView @JvmOverloads constructor(
         canvas.drawLine(0f, top, w, top, axisPaint)
         canvas.drawLine(0f, bottom, w, bottom, axisPaint)
 
-        if (series.isEmpty()) {
+        if (series.isEmpty() && oldSeries.isEmpty()) {
             canvas.drawText("暂无数据", 4f, h / 2, textPaint)
             return
         }
 
-        series.forEach { line ->
-            linePaint.color = line.color
-            linePaint.pathEffect = if (line.dashed) DashPathEffect(floatArrayOf(9f, 7f), 0f) else null
-            path.reset()
-            line.points.forEachIndexed { index, point ->
-                val x = xOf(point.timeMillis)
-                val y = yOf(point.value)
-                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        fun drawSeries(lines: List<Series>, alpha: Int) {
+            if (alpha <= 0) return
+            linePaint.alpha = alpha
+            lines.forEach { line ->
+                linePaint.color = line.color
+                linePaint.pathEffect = if (line.dashed) DashPathEffect(floatArrayOf(9f, 7f), 0f) else null
+                path.reset()
+                line.points.forEachIndexed { index, point ->
+                    val x = xOf(point.timeMillis)
+                    val y = yOf(point.value)
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                canvas.drawPath(path, linePaint)
             }
-            canvas.drawPath(path, linePaint)
         }
+
+        // Crossfade the old window out while the new one grows into place.
+        val newAlpha = (progress.coerceIn(0f, 1f) * 255f).toInt()
+        drawSeries(oldSeries, 255 - newAlpha)
+        drawSeries(series, newAlpha)
+        linePaint.alpha = 255
 
         // The current moment, so "now" is readable against the window.
         val nowX = xOf(System.currentTimeMillis())
