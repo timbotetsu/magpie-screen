@@ -40,7 +40,7 @@ class HeatmapView @JvmOverloads constructor(
 
     /** The grid is anchored on the device's calendar, the same clock the labels use. */
     private var onDay: ((Day, Float, Float) -> Unit)? = null
-    private var columns = 53
+    private var columns = 18
     private var fillHeight = true
 
     private var firstMonday: LocalDate = today
@@ -70,7 +70,7 @@ class HeatmapView @JvmOverloads constructor(
         days: Map<LocalDate, Day>,
         since: LocalDate?,
         today: LocalDate,
-        columns: Int = 53,
+        columns: Int = 18,
         fillHeight: Boolean = true,
         onDay: ((Day, Float, Float) -> Unit)? = null,
     ) {
@@ -167,7 +167,7 @@ class HeatmapView @JvmOverloads constructor(
         if (event.action != MotionEvent.ACTION_UP) return false
         val col = ((event.x - originX) / (cellW + gap)).toInt()
         val row = ((event.y - originY) / (cellH + gap)).toInt()
-        if (col !in 0..52 || row !in 0..6) return false
+        if (col !in 0 until columns || row !in 0..6) return false
         val date = firstMonday.plusWeeks(col.toLong()).plusDays(row.toLong())
         if (date.isAfter(today)) return false
         val x = originX + col * (cellW + gap)

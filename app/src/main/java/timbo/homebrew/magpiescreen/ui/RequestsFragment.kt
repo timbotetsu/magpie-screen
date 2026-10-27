@@ -29,6 +29,10 @@ class RequestsFragment : BaseFragment() {
         val b = FragmentRequestsBinding.inflate(inflater, container, false)
         binding = b
         b.refresh.setOnClickListener { load() }
+        // Draw the empty grid at its final size while the first request is in flight.
+        b.heatmap.setData(emptyMap(), null, LocalDate.now(), columns = WEEKS, fillHeight = false) { day, x, y ->
+            showBubble(day, x, y)
+        }
         load()
         return b.root
     }
