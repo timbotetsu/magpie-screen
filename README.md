@@ -1,4 +1,4 @@
-# Magpie 监控（magpie-screen）
+# MagpieScreen（magpie-screen）
 
 给 [Magpie](https://usemagpie.ai) 网关用的横屏用量看板：把网关的 token/费用/订阅额度画在一台小屏设备上长期挂在桌面上。
 
