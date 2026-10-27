@@ -21,8 +21,8 @@ android {
         // LX04 (小爱触屏音箱) ships Android 8.1 = API 27.
         minSdk = 27
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 2
+        versionName = "0.0.2"
     }
 
     buildFeatures {
