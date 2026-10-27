@@ -315,8 +315,9 @@ class QuotasFragment : BaseFragment() {
         b.cards.post {
             val viewport = scroll.height
             if (viewport <= 0) return@post
-            val gap = dp(4) * (shown.size - 1)
+            val gap = dp(4) * shown.size // every card carries a 4dp bottom margin
             val perCard = (viewport - gap) / shown.size
+            if (perCard <= 0) return@post
             val needed = shown.maxOf { card ->
                 dp(22) + card.windows.size.coerceAtLeast(1) * dp(46)
             }

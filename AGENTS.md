@@ -33,7 +33,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 1. **屏幕预算固定**：状态栏 24dp + 底栏 36dp → 内容 260dp。总览页不允许滚动，任何新增块都要在同一预算内重排；热力图/额度页各自内部滚动。
 2. **Fragment 里不要用字段初始化器碰 `app`**：`private val x = Foo(app.gateway)` 会在 `onAttach` 之前执行并抛 `Fragment not attached to an activity`（踩过一次）。用 `by lazy` 或放到 `onCreateView`。
-3. **时间按网关时区**：响应时间是 `…+08:00` 形式，用 `Fmt.gatewayDate()` / `Fmt.gatewayZoned()`；不要用设备时区换算，否则跨时区会错一天。
+3. **展示按设备时区，按天查询按网关日期**：网关时间戳是绝对时刻，不同网关会用不同 offset 序列化（`Z`、`+08:00`），展示（柱状图标签、气泡标题、热力图格子）一律用 `Fmt.localZoned()` / `Fmt.localDate()` 转成设备时区；只有 `/usage/requests?day=` 这类由网关自己解释的日期参数用 `Fmt.gatewayDate()`。不要直接截取时间戳前 10 位来展示，否则 UTC 网关下北京 00:00–07:59 的请求会被算到前一天。
 4. **图表 API 签名顺序**：`SeriesChartView.setData(points, style = …, formatter)` —— `style` 在 `formatter` 之前是为了保留尾随 lambda 写法（`setData(points) { … }`）。改签名必须同步 `OverviewFragment` 与 `QuotasFragment` 的调用点。
 5. **额度页只显示订阅卡**：不显示「本机 key 限制」；无卡片时给一行说明即可（历史上曾误加，已按要求删除）。
 6. **数据字段不臆造**：只渲染网关返回的字段，缺失用「未提供」；不要把余额、活跃天数、连续天数、热力图以外的指标编出来。

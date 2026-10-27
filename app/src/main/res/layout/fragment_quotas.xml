@@ -80,7 +80,8 @@
                 android:layout_weight="1"
                 android:layout_marginTop="3dp"
                 android:fillViewport="true"
-                android:scrollbars="vertical">
+                android:overScrollMode="never"
+                android:scrollbars="none">
 
                 <LinearLayout
                     android:id="@+id/cards"

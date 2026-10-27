@@ -86,16 +86,18 @@ class RequestsFragment : BaseFragment() {
 
         val days = HashMap<LocalDate, HeatmapView.Day>()
         snap.series.forEach { bucket ->
-            val date = Fmt.gatewayDate(bucket.time) ?: return@forEach
+            val date = Fmt.localDate(bucket.time) ?: return@forEach
+            val gatewayDate = Fmt.gatewayDate(bucket.time) ?: return@forEach
             days[date] = HeatmapView.Day(
                 date = date,
+                gatewayDate = gatewayDate,
                 calls = bucket.stats.calls.toInt(),
                 errors = bucket.stats.errors.toInt(),
                 tokens = bucket.stats.tokens.total,
                 cost = bucket.stats.cost,
             )
         }
-        val since = Fmt.gatewayDate(snap.since)
+        val since = Fmt.localDate(snap.since)
         val anchor = days.keys.maxOrNull() ?: LocalDate.now()
         b.heatmap.setData(days, since, anchor, columns = WEEKS, fillHeight = false) { day, x, y ->
             showBubble(day, x, y)
@@ -128,7 +130,8 @@ class RequestsFragment : BaseFragment() {
             totals = "请求 ${Fmt.raw(day.calls.toLong())} · Token ${Fmt.compact(day.tokens)}",
         )
         lifecycleScope.launch {
-            val models = loadDayModels(day.date)
+            // The cell is labelled with the device's date, but ?day= takes the gateway's.
+            val models = loadDayModels(day.gatewayDate)
             if (!handle.isShowing) return@launch
             handle.setRows(
                 models.take(MAX_MODEL_ROWS).map {
@@ -150,7 +153,7 @@ class RequestsFragment : BaseFragment() {
     private companion object {
         /** The gateway answers with daily buckets and clamps to what it retains. */
         const val YEAR_PERIOD = "365d"
-        const val WEEKS = 26
+        const val WEEKS = 18
         const val MAX_MODEL_ROWS = 4
         const val CARD_VISIBLE_MS = 5000L
     }

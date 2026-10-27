@@ -21,13 +21,24 @@ class HeatmapView @JvmOverloads constructor(
     defStyleAttr: Int = 0,
 ) : View(context, attrs, defStyleAttr) {
 
-    data class Day(val date: LocalDate, val calls: Int, val errors: Int, val tokens: Long, val cost: Double)
+    /**
+     * @param date the device-zone date shown in the grid
+     * @param gatewayDate the gateway's own calendar day, for `/usage/requests?day=`
+     */
+    data class Day(
+        val date: LocalDate,
+        val gatewayDate: LocalDate,
+        val calls: Int,
+        val errors: Int,
+        val tokens: Long,
+        val cost: Double,
+    )
 
     private var days: Map<LocalDate, Day> = emptyMap()
     private var since: LocalDate? = null
     private var today: LocalDate = LocalDate.now()
 
-    /** The grid is anchored on the gateway's own day, not the phone's clock. */
+    /** The grid is anchored on the device's calendar, the same clock the labels use. */
     private var onDay: ((Day, Float, Float) -> Unit)? = null
     private var columns = 53
     private var fillHeight = true
@@ -133,24 +144,19 @@ class HeatmapView @JvmOverloads constructor(
             canvas.drawText(label, 2f, y, textPaint)
         }
 
-        // month labels, skipped when the previous one is still close
+        // month labels: month only, and no label for a leading partial month
         var lastMonth = -1
-        var lastYear = -1
         var lastLabelX = -100f
         for (col in 0 until columns) {
             val monday = firstMonday.plusWeeks(col.toLong())
             if (monday.monthValue == lastMonth) continue
             lastMonth = monday.monthValue
+            // The grid starts mid-month: leave that month unlabelled rather than mislabel it.
+            if (col == 0 && monday.dayOfMonth != 1) continue
             val x = originX + col * (cellW + gap)
             if (x > w - 24f * density) break
             if (x - lastLabelX < 30f * density) continue
-            val label = if (monday.year != lastYear) {
-                "%d年%d月".format(monday.year, monday.monthValue)
-            } else {
-                "%d月".format(monday.monthValue)
-            }
-            lastYear = monday.year
-            canvas.drawText(label, x, monthsHeight - 4f, textPaint)
+            canvas.drawText("${monday.monthValue}月", x, monthsHeight - 4f, textPaint)
             lastLabelX = x
         }
     }

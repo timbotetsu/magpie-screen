@@ -1,9 +1,12 @@
 package timbo.homebrew.magpiescreen.ui
 
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 object Fmt {
@@ -41,27 +44,54 @@ object Fmt {
         return String.format(Locale.US, "%.1f%%", ratio * 100)
     }
 
-    private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
-    private val dayMinutes = SimpleDateFormat("MM-dd HH:mm", Locale.US)
+    private val clockFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US)
+    private val dayMinutesFormat = DateTimeFormatter.ofPattern("MM-dd HH:mm", Locale.US)
 
-    fun clock(millis: Long): String = clock.format(Date(millis))
-    /** Reset times: MM-dd HH:mm, no seconds. */
+    fun clock(millis: Long): String =
+        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(clockFormat)
+
+    /** Reset times: MM-dd HH:mm, no seconds, on the device clock. */
     fun isoShortMinutes(iso: String?): String {
         if (iso.isNullOrBlank()) return "未提供"
-        val millis = timbo.homebrew.magpiescreen.data.parseIsoMillis(iso)
-        return if (millis != null) dayMinutes.format(Date(millis)) else iso
+        val zoned = localZoned(iso) ?: return iso
+        return zoned.format(dayMinutesFormat)
     }
 
-    /** Calendar day as the gateway stamped it ("2026-10-27T07:00:00+08:00" -> 2026-10-27). */
+    /**
+     * The gateway's timestamp moved into the device's zone: the wall clock the user compares
+     * against. Gateway instances in different zones serialise the same instant with different
+     * offsets (`Z`, `+08:00`), so display must never trust the offset in the string.
+     */
+    fun localZoned(iso: String?, zone: ZoneId = ZoneId.systemDefault()): ZonedDateTime? {
+        val instant = instantOf(iso, zone) ?: return null
+        return instant.atZone(zone)
+    }
+
+    /** Calendar date of a gateway timestamp in the device's zone. */
+    fun localDate(iso: String?, zone: ZoneId = ZoneId.systemDefault()): LocalDate? =
+        localZoned(iso, zone)?.toLocalDate()
+
+    /** Hour-of-day label ("08") for a fixed 00–23 chart axis. */
+    fun hourOfDay(hour: Int): String = String.format(Locale.US, "%02d", hour)
+
+    /** Date label ("10-27") in the device's zone, for daily and weekly chart buckets. */
+    fun dayLabel(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
+        localZoned(iso, zone)?.let { String.format(Locale.US, "%02d-%02d", it.monthValue, it.dayOfMonth) }
+
+    /**
+     * The gateway's own calendar date. Use only where the gateway interprets the date itself
+     * (`/usage/requests?day=`); dates shown to the user come from [localDate].
+     */
     fun gatewayDate(iso: String?): LocalDate? {
         if (iso.isNullOrBlank() || iso.length < 10) return null
         return runCatching { LocalDate.parse(iso.take(10)) }.getOrNull()
     }
 
-    /** The whole timestamp with the gateway's offset, for hour-level buckets. */
-    fun gatewayZoned(iso: String?): ZonedDateTime? {
+    /** Absolute instant of a gateway timestamp; a bare local timestamp is read in [zone]. */
+    private fun instantOf(iso: String?, zone: ZoneId): Instant? {
         if (iso.isNullOrBlank()) return null
-        return runCatching { ZonedDateTime.parse(iso) }.getOrNull()
+        runCatching { OffsetDateTime.parse(iso) }.getOrNull()?.let { return it.toInstant() }
+        runCatching { LocalDateTime.parse(iso).atZone(zone) }.getOrNull()?.let { return it.toInstant() }
+        return null
     }
-
 }

@@ -23,12 +23,23 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/muted"
+            android:textSize="10sp" />
+
+        <TextView
             android:id="@+id/status"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:ellipsize="end"
+            android:gravity="end"
             android:maxLines="1"
             android:textColor="@color/muted"
             android:textSize="10sp" />
@@ -36,25 +47,17 @@
         <TextView
             android:id="@+id/refresh"
             style="@style/Chip"
+            android:layout_marginStart="8dp"
             android:layout_marginEnd="0dp"
             android:text="刷新" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/summary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/muted"
-        android:textSize="10sp" />
 
     <timbo.homebrew.magpiescreen.ui.HeatmapView
         android:id="@+id/heatmap"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="6dp"
         android:layout_weight="1" />
 
     <LinearLayout
