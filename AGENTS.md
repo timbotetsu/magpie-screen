@@ -79,7 +79,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 |---|---|---|---|
 | `Parse.kt` 里 `Concurrency` / `ActiveRequest` / `Routes`（第 338–434 行）与 `Endpoints.ROUTE` | 约 97 行 + `RouteAndConcurrencyTest.kt` 69 行 | 运行时零调用，只被单测使用 | 它们是网关 `/v1/magpie/concurrency`、`/route` 的响应契约；将来做「实时请求 / 路由追踪」时直接可用。`Endpoints.CONCURRENCY` 仍被设置页能力自检使用，不能删 |
 | `RequestsPage` 的 `through/direct/reported/isConsistent` | 约 12 行 | UI 不读，但 `isConsistent` 有单测 | 请求页已改成热力图，不再展示这些分项；保留可随时恢复明细页 |
-| `QuotasFragment` 546 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
+| `QuotasFragment` 560 行、纯代码搭视图 | — | 可读性 | 拆 `QuotaCardView` 属结构性改动，发版前不做 |
 | 三个数据页各自的缓存加载编排（fresh / stale / force / single-flight） | 约 100 行重复，页面加载流程没有纯 JVM 测试 | 新增页面或修改 TTL、状态行规则时要同步三处 | 目前只有 3 个数据页，抽 `CachedPageLoader` 的收益还不抵抽象成本；新增第 4 个数据页前先抽 |
 | 三个 Fragment 各一个 1 行私有 `dp()` | 3 行 | 无 | 合并要多一个文件，收益不抵成本 |
 

@@ -92,6 +92,7 @@ class QuotasFragment : BaseFragment() {
         val b = binding ?: return
         val source = app.connection()
         if (source == null) {
+            b.summary.text = ""
             b.status.text = "未配置连接"
             return
         }
@@ -222,11 +223,16 @@ class QuotasFragment : BaseFragment() {
             name to requireContext().getColor(palette[index % palette.size])
         }.toMap()
 
+        b.summary.text = if (cards.isNotEmpty() || history.isNotEmpty()) {
+            "${providers.size} 个供应商 · ${cards.size} 张卡片"
+        } else {
+            ""
+        }
         b.status.text = when {
             preview -> "缓存 ${Fmt.clock(lastUpdatedMillis)} · 更新中…"
             loadError != null -> "读取失败：$loadError"
             loaded.cardsInvalid -> "响应不可解析：额度"
-            else -> "${providers.size} 个供应商 · ${cards.size} 张卡片 · 更新 ${Fmt.clock(lastUpdatedMillis)}"
+            else -> "更新 ${Fmt.clock(lastUpdatedMillis)}"
         }
         renderProviders(b)
         renderCards(b, animate = animate && loaded.cardsBody != null)
@@ -272,18 +278,34 @@ class QuotasFragment : BaseFragment() {
             return
         }
         val shown = cards.filter { it.provider == selected }
-        shown.forEach { b.cards.addView(cardView(it, animate)) }
+        val height = cardHeightFor(b, shown)
+        shown.forEach { b.cards.addView(cardView(it, animate, height)) }
         fillColumn(b, shown)
     }
 
-    private fun cardView(card: QuotaCard, animate: Boolean): LinearLayout {
+    /** The stretched height a card would get, or 0 when it should keep its natural height. */
+    private fun cardHeightFor(b: FragmentQuotasBinding, shown: List<QuotaCard>): Int {
+        if (shown.isEmpty()) return 0
+        val scroll = b.cards.parent as? View ?: return 0
+        val viewport = scroll.height
+        if (viewport <= 0) return 0
+        val gap = dp(4) * shown.size // every card carries a 4dp bottom margin
+        val perCard = (viewport - gap) / shown.size
+        if (perCard <= 0) return 0
+        val needed = shown.maxOf { card ->
+            dp(22) + card.windows.size.coerceAtLeast(1) * dp(46)
+        }
+        return if (perCard >= needed) perCard else 0
+    }
+
+    private fun cardView(card: QuotaCard, animate: Boolean, height: Int): LinearLayout {
         val box = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.card_bg)
             setPadding(dp(7), dp(5), dp(7), dp(6))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                if (height > 0) height else LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = dp(4) }
         }
         val title = when {
@@ -493,18 +515,10 @@ class QuotasFragment : BaseFragment() {
 
     /** Grows the cards to the column height so the left side has no dead space. */
     private fun fillColumn(b: FragmentQuotasBinding, shown: List<QuotaCard>) {
-        val scroll = b.cards.parent as? View ?: return
         if (shown.isEmpty()) return
         b.cards.post {
-            val viewport = scroll.height
-            if (viewport <= 0) return@post
-            val gap = dp(4) * shown.size // every card carries a 4dp bottom margin
-            val perCard = (viewport - gap) / shown.size
+            val perCard = cardHeightFor(b, shown)
             if (perCard <= 0) return@post
-            val needed = shown.maxOf { card ->
-                dp(22) + card.windows.size.coerceAtLeast(1) * dp(46)
-            }
-            if (perCard < needed) return@post
             for (i in 0 until b.cards.childCount) {
                 val child = b.cards.getChildAt(i)
                 child.layoutParams = child.layoutParams.apply { height = perCard }
