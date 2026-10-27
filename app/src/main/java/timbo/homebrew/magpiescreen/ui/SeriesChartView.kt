@@ -130,9 +130,10 @@ class SeriesChartView @JvmOverloads constructor(
                 canvas.drawText(point.label, x, labelY, smallPaint)
             }
         } else {
-            canvas.drawText(points.first().label, 2f, labelY, textPaint)
-            val lastWidth = textPaint.measureText(points.last().label)
-            canvas.drawText(points.last().label, w - lastWidth - 2f, labelY, textPaint)
+            smallPaint.textSize = 12f
+            canvas.drawText(points.first().label, 2f, labelY, smallPaint)
+            val lastWidth = smallPaint.measureText(points.last().label)
+            canvas.drawText(points.last().label, w - lastWidth - 2f, labelY, smallPaint)
         }
     }
 }
