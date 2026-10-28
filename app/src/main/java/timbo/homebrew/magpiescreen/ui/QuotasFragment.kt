@@ -34,6 +34,8 @@ class QuotasFragment : BaseFragment() {
     private var cards: List<QuotaCard> = emptyList()
     private var history: List<QuotaHistory> = emptyList()
     private var providers: List<String> = emptyList()
+    /** provider id -> gateway display name (falls back to the id). */
+    private var providerLabels: Map<String, String> = emptyMap()
     private var selected: String? = null
     private var loadError: String? = null
     private var windowColors: Map<String, Int> = emptyMap()
@@ -211,6 +213,10 @@ class QuotasFragment : BaseFragment() {
         lastUpdatedMillis = loaded.at
 
         providers = cards.map { it.provider }.filter { it.isNotBlank() }.distinct()
+        providerLabels = cards
+            .filter { it.provider.isNotBlank() }
+            .groupBy { it.provider }
+            .mapValues { (id, group) -> group.firstOrNull { it.name.isNotBlank() }?.name ?: id }
         if (selected !in providers) selected = providers.firstOrNull()
 
         val palette = intArrayOf(R.color.series1, R.color.series2, R.color.series3, R.color.series4)
@@ -245,7 +251,7 @@ class QuotasFragment : BaseFragment() {
         if (providers.size <= 1) return
         providers.forEach { provider ->
             val chip = TextView(requireContext()).apply {
-                text = provider
+                text = providerLabels[provider] ?: provider
                 isSelected = provider == selected
                 setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10.5f)
                 setTextColor(context.getColor(if (provider == selected) R.color.accent else R.color.muted))
@@ -308,11 +314,7 @@ class QuotasFragment : BaseFragment() {
                 if (height > 0) height else LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = dp(4) }
         }
-        val title = when {
-            card.name.isBlank() -> card.provider
-            card.name.equals(card.provider, ignoreCase = true) -> card.name
-            else -> "${card.provider} · ${card.name}"
-        }
+        val title = card.name.ifBlank { card.provider }
         box.addView(text(title, 11, R.color.fg))
         card.error?.let { box.addView(text("error：$it", 10, R.color.error)) }
 
